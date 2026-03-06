@@ -165,8 +165,11 @@ When you run a slash command, `src/github.js` extracts keywords from your messag
 - **Open issues** — if question mentions bugs, tasks, or issues
 - **Recent commits** — if question is about recent changes
 - **Repo overview + README** — as fallback if nothing else matches
+- **Codebase overview** — if `CODEBASE.md` exists in the repo root, includes it for richer AI answers (path configurable in `config/github.js` → `codebaseOverviewPath`)
 
 When a question matches multiple data types (e.g. "project status"), PRs, issues, and commits are fetched **in parallel** to minimize latency.
+
+**Better answers with CODEBASE.md:** Add a `CODEBASE.md` file to the root of your target repository describing key files, folders, and architecture. The bot will include it automatically when it exists. To change the path or disable it, set `codebaseOverviewPath` in `config/github.js`.
 
 **Keyword tuning:** Common words like "what", "how", "the", etc. are filtered out before building the code search query. The full list is in `prompts/stopwords.md` — add or remove words (one per line) there.
 

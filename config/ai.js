@@ -38,6 +38,9 @@ const PROVIDERS = {
 };
 
 const config = PROVIDERS[ACTIVE_PROVIDER];
-if (!config) throw new Error(`Unknown provider "${ACTIVE_PROVIDER}". Choose: ${Object.keys(PROVIDERS).join(", ")}`);
+if (!config)
+  throw new Error(
+    `Unknown provider "${ACTIVE_PROVIDER}". Choose: ${Object.keys(PROVIDERS).join(", ")}`
+  );
 
 module.exports = { ACTIVE_PROVIDER, ...config };

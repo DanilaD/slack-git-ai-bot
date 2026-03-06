@@ -1,7 +1,14 @@
 "use strict";
 
 const { Octokit } = require("@octokit/rest");
-const { repo: repoSlug, maxCodeFiles, maxFileChars, maxPRs, maxIssues, maxCommits } = require("../config/github");
+const {
+  repo: repoSlug,
+  maxCodeFiles,
+  maxFileChars,
+  maxPRs,
+  maxIssues,
+  maxCommits,
+} = require("../config/github");
 const STOP_WORDS = require("../config/stopwords");
 
 // Fail fast if token is missing (mirrors jira.js behaviour)
@@ -11,12 +18,14 @@ const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 
 // Parse once at module load
 const [owner, repo] = repoSlug.split("/");
-if (!owner || !repo) throw new Error(`config/github.js: repo must be "owner/repo", got "${repoSlug}"`);
+if (!owner || !repo)
+  throw new Error(`config/github.js: repo must be "owner/repo", got "${repoSlug}"`);
 
 // ── Keyword extraction ────────────────────────────────────────
 
 const extractKeywords = (text) =>
-  text.toLowerCase()
+  text
+    .toLowerCase()
     .replace(/[^a-z0-9 ]/g, " ")
     .split(/\s+/)
     .filter((w) => w.length > 2 && !STOP_WORDS.has(w))
@@ -27,8 +36,8 @@ const extractKeywords = (text) =>
 const matches = (q, ...terms) => terms.some((t) => q.includes(t));
 
 const wants = {
-  prs:     (q) => matches(q, "pr", "pull request", "merge", "progress", "status"),
-  issues:  (q) => matches(q, "issue", "bug", "task", "todo", "progress", "status"),
+  prs: (q) => matches(q, "pr", "pull request", "merge", "progress", "status"),
+  issues: (q) => matches(q, "issue", "bug", "task", "todo", "progress", "status"),
   commits: (q) => matches(q, "commit", "recent", "latest", "last change", "who changed"),
 };
 
@@ -40,32 +49,55 @@ const fetchPRs = async () => {
 
   return {
     sources: data.map((pr) => ({ label: `PR #${pr.number}: ${pr.title}`, url: pr.html_url })),
-    text: `## Open Pull Requests (${data.length})\n` + data.map((pr) =>
-      `- PR #${pr.number} "${pr.title}" by @${pr.user.login} | ${pr.head.ref} → ${pr.base.ref}\n  ${pr.html_url}${pr.body ? `\n  ${pr.body.slice(0, 200)}` : ""}`
-    ).join("\n\n"),
+    text:
+      `## Open Pull Requests (${data.length})\n` +
+      data
+        .map(
+          (pr) =>
+            `- PR #${pr.number} "${pr.title}" by @${pr.user.login} | ${pr.head.ref} → ${pr.base.ref}\n  ${pr.html_url}${pr.body ? `\n  ${pr.body.slice(0, 200)}` : ""}`
+        )
+        .join("\n\n"),
   };
 };
 
 const fetchIssues = async () => {
-  const { data } = await octokit.issues.listForRepo({ owner, repo, state: "open", per_page: maxIssues });
+  const { data } = await octokit.issues.listForRepo({
+    owner,
+    repo,
+    state: "open",
+    per_page: maxIssues,
+  });
   const issues = data.filter((i) => !i.pull_request);
   if (!issues.length) return { text: "No open issues.", sources: [] };
 
   return {
     sources: issues.map((i) => ({ label: `Issue #${i.number}: ${i.title}`, url: i.html_url })),
-    text: `## Open Issues (${issues.length})\n` + issues.map((i) =>
-      `- #${i.number} "${i.title}" [${i.labels.map((l) => l.name).join(", ") || "no labels"}]\n  ${i.html_url}${i.body ? `\n  ${i.body.slice(0, 150)}` : ""}`
-    ).join("\n\n"),
+    text:
+      `## Open Issues (${issues.length})\n` +
+      issues
+        .map(
+          (i) =>
+            `- #${i.number} "${i.title}" [${i.labels.map((l) => l.name).join(", ") || "no labels"}]\n  ${i.html_url}${i.body ? `\n  ${i.body.slice(0, 150)}` : ""}`
+        )
+        .join("\n\n"),
   };
 };
 
 const fetchCommits = async () => {
   const { data } = await octokit.repos.listCommits({ owner, repo, per_page: maxCommits });
   return {
-    sources: data.map((c) => ({ label: c.commit.message.split("\n")[0].slice(0, 60), url: c.html_url })),
-    text: `## Recent Commits\n` + data.map((c) =>
-      `- ${c.sha.slice(0, 7)} by ${c.commit.author.name} (${c.commit.author.date.slice(0, 10)}): "${c.commit.message.split("\n")[0]}"`
-    ).join("\n"),
+    sources: data.map((c) => ({
+      label: c.commit.message.split("\n")[0].slice(0, 60),
+      url: c.html_url,
+    })),
+    text:
+      `## Recent Commits\n` +
+      data
+        .map(
+          (c) =>
+            `- ${c.sha.slice(0, 7)} by ${c.commit.author.name} (${c.commit.author.date.slice(0, 10)}): "${c.commit.message.split("\n")[0]}"`
+        )
+        .join("\n"),
   };
 };
 
@@ -99,10 +131,12 @@ const fetchCode = async (question) => {
 
   return {
     sources,
-    text: `## Relevant Code Files\n` + files
-      .filter((r) => r.status === "fulfilled")
-      .map((r) => r.value)
-      .join("\n\n"),
+    text:
+      `## Relevant Code Files\n` +
+      files
+        .filter((r) => r.status === "fulfilled")
+        .map((r) => r.value)
+        .join("\n\n"),
   };
 };
 
@@ -116,7 +150,9 @@ const fetchOverview = async () => {
   try {
     const { data: rm } = await octokit.repos.getReadme({ owner, repo });
     readme = Buffer.from(rm.content, "base64").toString("utf-8").slice(0, 1000);
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   const tree = Array.isArray(entries)
     ? entries.map((f) => `${f.type === "dir" ? "📁" : "📄"} ${f.name}`).join("\n")
@@ -135,13 +171,16 @@ const fetchGitHubContext = async (question) => {
   const parts = [];
   const sources = [];
 
-  const add = ({ text, sources: s }) => { parts.push(text); sources.push(...s); };
+  const add = ({ text, sources: s }) => {
+    parts.push(text);
+    sources.push(...s);
+  };
 
   try {
     // Collect which data types to fetch and run them in parallel
     const fetchers = [];
-    if (wants.prs(q))     fetchers.push(fetchPRs);
-    if (wants.issues(q))  fetchers.push(fetchIssues);
+    if (wants.prs(q)) fetchers.push(fetchPRs);
+    if (wants.issues(q)) fetchers.push(fetchIssues);
     if (wants.commits(q)) fetchers.push(fetchCommits);
 
     if (fetchers.length) {

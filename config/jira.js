@@ -6,8 +6,8 @@
 // ============================================================
 
 module.exports = {
-  host: "https://techaxy.atlassian.net",  // your Atlassian domain
-  email: "dan@techaxy.com",               // account used to create tickets
-  project: "INTEL",                        // Jira project key
-  defaultIssueType: "Task",               // Task, Bug, Story, etc.
+  host: "https://techaxy.atlassian.net", // your Atlassian domain
+  email: "dan@techaxy.com", // account used to create tickets
+  project: "INTEL", // Jira project key
+  defaultIssueType: "Task", // Task, Bug, Story, etc.
 };

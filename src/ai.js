@@ -8,10 +8,7 @@ console.log(`[ai] Provider: ${name} | Model: ${model}`);
 // ── Template renderer ─────────────────────────────────────────
 
 const render = (template, vars) =>
-  Object.entries(vars).reduce(
-    (s, [k, v]) => s.replaceAll(`{${k}}`, v ?? ""),
-    template
-  );
+  Object.entries(vars).reduce((s, [k, v]) => s.replaceAll(`{${k}}`, v ?? ""), template);
 
 // ── HTTP callers ──────────────────────────────────────────────
 
@@ -71,8 +68,8 @@ const contextVars = (question, ctx) => ({
   context: ctx.text || "No context available.",
 });
 
-const askQuestion       = (q, ctx) => run(ASK,  contextVars(q, ctx));
-const analyzeTask       = (q, ctx) => run(TASK, contextVars(q, ctx));
+const askQuestion = (q, ctx) => run(ASK, contextVars(q, ctx));
+const analyzeTask = (q, ctx) => run(TASK, contextVars(q, ctx));
 const generateJiraContent = (q, ctx) => run(JIRA, contextVars(q, ctx));
 
 module.exports = { askQuestion, analyzeTask, generateJiraContent };

@@ -44,7 +44,7 @@ jobs:
             echo "   $PREV_SHA → $NEW_SHA"
 
             echo "── [2/5] Install dependencies ───────────────────────"
-            npm install --production --silent
+            npm install --production --ignore-scripts --silent
 
             echo "── [3/5] Restart bot ────────────────────────────────"
             pm2 restart "$PM2_NAME" --update-env
@@ -62,7 +62,7 @@ jobs:
               if [ "$i" = "3" ]; then
                 echo "── ROLLBACK: health check failed, reverting to $PREV_SHA ──"
                 git reset --hard "$PREV_SHA"
-                npm install --production --silent
+                npm install --production --ignore-scripts --silent
                 pm2 restart "$PM2_NAME" --update-env
                 echo "   Rollback complete. Previous version restored."
                 exit 1

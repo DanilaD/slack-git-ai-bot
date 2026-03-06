@@ -6,6 +6,101 @@ A Slack bot that connects your GitHub repository with AI to answer questions, an
 
 ---
 
+## File Inventory
+
+### Source (`src/`) — 4 files
+
+| File | Purpose |
+|------|---------|
+| `index.js` (233 lines) | Express app: Slack verification, `/health`, `/slack/ask`, `/slack/task`, `/slack/jira`, `/slack/events`; `slashCommand` factory; Slack helpers |
+| `github.js` (205 lines) | GitHub: keyword extraction, PRs/issues/commits/code search, overview fallback; all fetchers run in parallel |
+| `ai.js` (77 lines) | AI: config-based provider (Groq/OpenAI/Anthropic), template rendering, `askQuestion`, `analyzeTask`, `generateJiraContent` |
+| `jira.js` (38 lines) | Jira: `createJiraTicket`, ADF description, token check at load |
+
+### Config (`config/`) — 5 files
+
+| File | Purpose |
+|------|---------|
+| `ai.js` | Provider selection (groq/openai/anthropic), models, API URLs |
+| `github.js` | `repo`, `maxCodeFiles`, `maxFileChars`, `maxPRs`, `maxIssues`, `maxCommits` |
+| `jira.js` | `host`, `email`, `project`, `defaultIssueType` |
+| `prompts.js` | ASK, TASK, JIRA prompts (system + user templates) |
+| `stopwords.js` | Stop words for code-search keyword extraction |
+
+### Tests (`tests/`) — 5 files
+
+| File | Purpose |
+|------|---------|
+| `routes.test.js` (178 lines) | Route tests: `/health`, `/slack/ask`, `/slack/events`; Slack signature; mocks for GitHub, AI, Jira |
+| `middleware.test.js` (112 lines) | Slack signature algo: valid/invalid signatures, stale timestamp, missing headers |
+| `ai.test.js` (139 lines) | AI: prompt rendering, API call shape, error handling, missing API key |
+| `github.test.js` (253 lines) | GitHub: PRs, issues, commits, parallel fetch, code search, overview fallback, error handling |
+| `jira.test.js` (153 lines) | Jira: create ticket, ADF body, auth header, error handling |
+
+### Scripts & Deployment
+
+| File | Purpose |
+|------|---------|
+| `deploy.sh` (71 lines) | Pull, `npm install`, PM2 restart, health check with retries, rollback on failure |
+| `install.sh` (120 lines) | One-time setup: Node 20, PM2, nginx, git; clone; `.env`; nginx + PM2 config |
+
+### GitHub Actions
+
+| File | Purpose |
+|------|---------|
+| `ci.yml` | Lint, format check, tests, `npm audit` on push/PR to `main` |
+| `deploy.yml` | SSH deploy on push to `main`; health check; rollback on failure |
+| `codeql.yml` | CodeQL on push/schedule for security |
+| `dependabot.yml` | Weekly npm updates; minor+patch grouped |
+
+### Tooling & Config
+
+| File | Purpose |
+|------|---------|
+| `package.json` | Scripts: start, dev, lint, format, test, test:coverage; Jest + lint-staged |
+| `eslint.config.mjs` | ESLint flat config; `src` + `config` |
+| `.prettierrc` | Semi, double quotes, 100 width, 2 spaces |
+| `.prettierignore` | Ignores `node_modules`, `*.sh`, `*.md` |
+| `.editorconfig` | Indent 2, LF, trim, final newline |
+| `.gitignore` | Ignores `node_modules`, `.env`, `coverage`, logs |
+| `.husky/pre-commit` | Runs `lint-staged` on commit |
+
+### Other
+
+| File | Purpose |
+|------|---------|
+| `ecosystem.config.js` | PM2: script `src/index.js`, cwd `/opt/slack-git-ai-bot` |
+| `.env.example` | Template env vars; only secrets |
+| `README.md` (461 lines) | Setup, usage, deploy, troubleshooting |
+| `LICENSE` | License file |
+
+---
+
+## Strengths & Notable Details
+
+**Strengths:**
+- Clear split: `src` (app) vs `config` (tunable settings)
+- Secrets in `.env`, non-secrets in `config/`
+- Slack signature check with buffer-length guard
+- Parallel GitHub fetches (PRs, issues, commits, code search)
+- Fail-fast for `GITHUB_TOKEN` and `JIRA_TOKEN` at load time
+- Health check with deploy rollback
+- Jest tests with mocks; CI runs lint, format, tests, audit
+- Dependabot and CodeQL in place
+- Husky + lint-staged for pre-commit checks
+
+**Notable Details:**
+- `deploy.yml` needs `SERVER_HOST`, `SERVER_USER`, `SERVER_SSH_KEY`, `SERVER_PORT` secrets set in GitHub
+- `config/github.js` and `config/jira.js` contain app-specific values (repo, host, project, email) — edit these when reusing for a different project
+- `middleware.test.js` reimplements Slack signature logic for spec tests (possible future extraction to a shared module)
+- `routes.test.js` expects form-urlencoded Slack body; `signedSlackRequest` uses `URLSearchParams`
+
+**Dependency Versions:**
+- Runtime: `express` ^5.2.1, `@octokit/rest` ^22.0.1, `dotenv` ^17.3.1
+- Dev: `jest` ^30.2.0, `eslint` ^10.0.2, `prettier` ^3.0.0, `supertest` ^7.2.2, `nock` ^14.0.11
+
+---
+
 ## What It Does
 
 | Command | What it does |

@@ -44,7 +44,7 @@ PM2 → keeps bot running 24/7, auto-restarts on crash
 
 ## Server
 
-- **Host:** `YOUR_SERVER_IP`
+- **Host:** `185.5.54.69`
 - **OS:** Ubuntu/Debian Linux
 - **Node.js:** v20 LTS
 - **Process manager:** PM2 (fork mode)
@@ -57,9 +57,9 @@ PM2 → keeps bot running 24/7, auto-restarts on crash
 
 | Command | URL |
 |---------|-----|
-| `/ask` | `http://YOUR_SERVER_IP/slack/ask` |
-| `/task` | `http://YOUR_SERVER_IP/slack/task` |
-| `/jira` | `http://YOUR_SERVER_IP/slack/jira` |
+| `/ask` | `http://185.5.54.69/slack/ask` |
+| `/task` | `http://185.5.54.69/slack/task` |
+| `/jira` | `http://185.5.54.69/slack/jira` |
 
 ---
 
@@ -274,7 +274,7 @@ git clone https://github.com/DanilaD/slack-git-ai-bot.git /opt/slack-git-ai-bot
 
 # Install dependencies
 cd /opt/slack-git-ai-bot
-npm install --production
+npm install --production --ignore-scripts
 
 # Create your .env file
 cp .env.example .env
@@ -352,7 +352,7 @@ cd /opt/slack-git-ai-bot
 git pull origin main
 
 # Install any new dependencies
-npm install --production
+npm install --production --ignore-scripts
 
 # Restart bot to load new code
 pm2 restart slack-git-ai-bot --update-env
@@ -378,6 +378,28 @@ cd /opt/slack-git-ai-bot
 pm2 start src/index.js --name slack-git-ai-bot
 pm2 save
 ```
+
+---
+
+### Automatic Deployment (CD Pipeline)
+
+The repo includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) that automatically deploys to the server whenever code is pushed to `main`.
+
+**Required GitHub Secrets** — add these at github.com/DanilaD/slack-git-ai-bot → Settings → Secrets and variables → Actions:
+
+| Secret | Value |
+|--------|-------|
+| `SERVER_HOST` | `185.5.54.69` |
+| `SERVER_USER` | `root` |
+| `SERVER_PORT` | `22` |
+| `SERVER_SSH_KEY` | contents of your private SSH key (`cat ~/.ssh/id_rsa` on your local machine) |
+
+Once secrets are set, every push to `main` will:
+1. SSH into the server
+2. Pull latest code (`git fetch + reset --hard`)
+3. Install dependencies
+4. Restart PM2
+5. Run health check — auto-rollback if it fails
 
 ---
 
@@ -442,9 +464,9 @@ Registered at [api.slack.com/apps](https://api.slack.com/apps) — create a **Sl
 **Bot Token Scopes:** `commands`, `chat:write`, `chat:write.public`
 
 **Slash Commands:**
-- `/ask` → `http://YOUR_SERVER_IP/slack/ask`
-- `/task` → `http://YOUR_SERVER_IP/slack/task`
-- `/jira` → `http://YOUR_SERVER_IP/slack/jira`
+- `/ask` → `http://185.5.54.69/slack/ask`
+- `/task` → `http://185.5.54.69/slack/task`
+- `/jira` → `http://185.5.54.69/slack/jira`
 
 ---
 

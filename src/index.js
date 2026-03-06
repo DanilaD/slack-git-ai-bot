@@ -114,10 +114,10 @@ const buildAnswerBlocks = (question, answer, sources, label = "Answer") => [
 // ── Generic command runner ────────────────────────────────────
 
 const runCommand =
-  (label, aiFn, buildBlocks) =>
+  (label, aiFn, buildBlocks, fetchOptions = {}) =>
   async ({ text, user_id, response_url }) => {
     try {
-      const ctx = await fetchGitHubContext(text);
+      const ctx = await fetchGitHubContext(text, fetchOptions);
       await slackUpdate(response_url, `_<@${user_id}>:_ *${text}*\n\n📂 Found context. Working...`);
       const result = await aiFn(text, ctx);
       await slackPost(response_url, {
@@ -154,8 +154,11 @@ app.post(
   ...slashCommand({
     emptyHint: "Ask a question. Example: `/ask How does registration work?`",
     ackText: (uid, q) => `_<@${uid}> asked:_ *${q}*\n\n⏳ Searching codebase...`,
-    run: runCommand("ask", askQuestion, (q, answer, ctx) =>
-      buildAnswerBlocks(q, answer, ctx.sources)
+    run: runCommand(
+      "ask",
+      askQuestion,
+      (q, answer, ctx) => buildAnswerBlocks(q, answer, ctx.sources),
+      { includeDocs: true }
     ),
   })
 );
@@ -167,8 +170,11 @@ app.post(
   ...slashCommand({
     emptyHint: "Describe the task. Example: `/task Add email verification to registration`",
     ackText: (uid, q) => `_<@${uid}> requested task analysis:_ *${q}*\n\n⏳ Analyzing codebase...`,
-    run: runCommand("task", analyzeTask, (q, plan, ctx) =>
-      buildAnswerBlocks(q, plan, ctx.sources, "Implementation Plan")
+    run: runCommand(
+      "task",
+      analyzeTask,
+      (q, plan, ctx) => buildAnswerBlocks(q, plan, ctx.sources, "Implementation Plan"),
+      { includeDocs: true }
     ),
   })
 );
@@ -177,7 +183,7 @@ app.post(
 
 const runJira = async ({ text, user_id, response_url }) => {
   try {
-    const ctx = await fetchGitHubContext(text);
+    const ctx = await fetchGitHubContext(text, { includeDocs: true });
     await slackUpdate(response_url, `_<@${user_id}>:_ *${text}*\n\n📂 Generating ticket...`);
     const content = await generateJiraContent(text, ctx);
     await slackUpdate(response_url, `_<@${user_id}>:_ *${text}*\n\n✍️ Creating Jira ticket...`);

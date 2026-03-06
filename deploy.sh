@@ -1,132 +1,30 @@
 #!/bin/bash
 # ============================================================
-# deploy.sh — One-shot server setup for Slack Claude Bot
-# Run as root on a fresh Ubuntu/Debian VPS
+# deploy.sh — Update the bot from GitHub and restart
+# Run this on the server whenever you push new code.
+#
 # Usage: bash deploy.sh
 # ============================================================
 
-set -e  # Exit on any error
+set -euo pipefail
 
-echo "🚀 Starting Slack Claude Bot deployment..."
+APP_DIR="/opt/slack-git-ai-bot"
+PM2_NAME="slack-git-ai-bot"
 
-# ── 1. Update system ─────────────────────────────────────────
-echo ""
-echo "📦 Updating system packages..."
-apt-get update -y && apt-get upgrade -y
+echo "── Pulling latest code ──────────────────────────────────"
+cd "$APP_DIR"
+git pull origin main
 
-# ── 2. Install Node.js 20 LTS ────────────────────────────────
-echo ""
-echo "📦 Installing Node.js 20..."
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-apt-get install -y nodejs
+echo "── Installing dependencies ──────────────────────────────"
+npm install --production --silent
 
-echo "✅ Node version: $(node -v)"
-echo "✅ NPM version:  $(npm -v)"
+echo "── Restarting bot ───────────────────────────────────────"
+pm2 restart "$PM2_NAME" --update-env
 
-# ── 3. Install PM2 globally ──────────────────────────────────
-echo ""
-echo "📦 Installing PM2..."
-npm install -g pm2
-
-# ── 4. Install nginx ─────────────────────────────────────────
-echo ""
-echo "📦 Installing nginx..."
-apt-get install -y nginx
-
-# ── 5. Create app directory ──────────────────────────────────
-echo ""
-echo "📁 Setting up app directory..."
-mkdir -p /opt/slack-claude-bot
-cd /opt/slack-claude-bot
-
-# ── 6. Copy bot files ────────────────────────────────────────
-# This assumes you're running deploy.sh from the same folder as the bot files
-echo ""
-echo "📂 Copying bot files..."
-cp -r "$(dirname "$0")"/{index.js,github.js,claude.js,package.json} /opt/slack-claude-bot/
-
-# ── 7. Install npm dependencies ──────────────────────────────
-echo ""
-echo "📦 Installing npm dependencies..."
-cd /opt/slack-claude-bot
-npm install --production
-
-# ── 8. Set up .env if not already present ───────────────────
-if [ ! -f /opt/slack-claude-bot/.env ]; then
-  echo ""
-  echo "⚙️  Creating .env file — please fill in your tokens!"
-  cat > /opt/slack-claude-bot/.env << 'EOF'
-# Slack
-SLACK_BOT_TOKEN=xoxb-your-bot-token-here
-SLACK_SIGNING_SECRET=your-signing-secret-here
-
-# GitHub
-GITHUB_TOKEN=ghp_your-github-token-here
-GITHUB_REPO=owner/repo-name
-
-# Anthropic
-ANTHROPIC_API_KEY=sk-ant-your-api-key-here
-
-# Server
-PORT=3000
-EOF
-  echo "⚠️  Edit /opt/slack-claude-bot/.env with your actual tokens before starting!"
-fi
-
-# ── 9. Configure nginx reverse proxy ────────────────────────
-echo ""
-echo "🌐 Configuring nginx..."
-cat > /etc/nginx/sites-available/slack-bot << 'EOF'
-server {
-    listen 80;
-    server_name _;
-
-    location /slack/ {
-        proxy_pass http://localhost:3000/slack/;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_read_timeout 60s;
-    }
-}
-EOF
-
-ln -sf /etc/nginx/sites-available/slack-bot /etc/nginx/sites-enabled/slack-bot
-rm -f /etc/nginx/sites-enabled/default
-nginx -t && systemctl restart nginx
-systemctl enable nginx
-
-# ── 10. Open firewall ports ──────────────────────────────────
-echo ""
-echo "🔒 Opening firewall ports..."
-ufw allow OpenSSH
-ufw allow 80/tcp
-ufw allow 443/tcp
-ufw --force enable
-
-# ── 11. Start bot with PM2 ───────────────────────────────────
-echo ""
-echo "🤖 Starting bot with PM2..."
-cd /opt/slack-claude-bot
-pm2 start ecosystem.config.js
-pm2 save
-pm2 startup systemd -u root --hp /root | tail -1 | bash
+echo "── Status ───────────────────────────────────────────────"
+pm2 status "$PM2_NAME"
 
 echo ""
-echo "============================================================"
-echo "✅ Deployment complete!"
-echo ""
-echo "Your bot is running at: http://YOUR_SERVER_IP/slack/ask"
-echo ""
-echo "Next steps:"
-echo "  1. Edit /opt/slack-claude-bot/.env with your tokens"
-echo "  2. Run: pm2 restart slack-claude-bot"
-echo "  3. In Slack app settings, set slash command URL to:"
-echo "     http://YOUR_SERVER_IP/slack/ask"
-echo ""
-echo "Useful commands:"
-echo "  pm2 status              — check if bot is running"
-echo "  pm2 logs slack-claude-bot — view live logs"
-echo "  pm2 restart slack-claude-bot — restart after .env changes"
-echo "============================================================"
+echo "✅ Deploy complete."
+echo "   Logs:   pm2 logs $PM2_NAME"
+echo "   Health: curl http://localhost:3000/health"

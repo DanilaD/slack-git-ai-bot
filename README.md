@@ -2,7 +2,7 @@
 
 A Slack bot that connects your GitHub repository with AI to answer questions, analyze tasks, and create Jira tickets — all from Slack slash commands.
 
-**Built with:** Node.js · Express · Groq AI (kimi-k2) · GitHub API · Jira API · PM2 · nginx
+**Built with:** Node.js · Express · AI (Groq / OpenAI / Anthropic) · GitHub API · Jira API · PM2 · nginx
 
 ---
 
@@ -22,17 +22,17 @@ A Slack bot that connects your GitHub repository with AI to answer questions, an
 Slack slash command (/ask, /task, /jira)
         │
         ▼
-  Express server (index.js) — port 3000
+  Express server (src/index.js) — port 3000
         │
-        ├──► github.js
+        ├──► src/github.js
         │    Searches repo for relevant files based on keywords
         │    Fetches: code files, open PRs, issues, recent commits
         │
-        ├──► claude.js
-        │    Sends question + code context to Groq AI (kimi-k2-instruct)
+        ├──► src/ai.js
+        │    Sends question + code context to AI (provider set in config/ai.js)
         │    Returns human-friendly answer or structured analysis
         │
-        └──► jira.js
+        └──► src/jira.js
              Creates Jira ticket via Atlassian REST API
              Includes full AI analysis as ticket description
 
@@ -154,7 +154,7 @@ Edit `config/prompts.js` and restart the bot — no other files need changing.
 
 ## How the Bot Searches Code
 
-When you run a slash command, `github.js` extracts keywords from your message and searches the GitHub repo. It fetches:
+When you run a slash command, `src/github.js` extracts keywords from your message and searches the GitHub repo. It fetches:
 
 - **Code files** — actual source code matching your keywords (up to 4 files, 2000 chars each)
 - **Open PRs** — if question is about PRs, progress, or status
@@ -168,7 +168,7 @@ The fetched code is sent to the AI along with your question so it answers based 
 
 ## Jira Integration
 
-**Project:** set via `JIRA_PROJECT` in `.env` (e.g. `INTEL`)
+**Project:** set in `config/jira.js` (project key, host, email)
 
 When `/jira` is used, the bot:
 1. Searches GitHub for relevant code
@@ -296,6 +296,11 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_read_timeout 60s;
     }
+
+    location /health {
+        proxy_pass http://127.0.0.1:3000/health;
+        proxy_http_version 1.1;
+    }
 }
 EOF
 
@@ -319,7 +324,10 @@ pm2 startup   # run the printed command to auto-start on reboot
 Verify it's running:
 ```bash
 pm2 status
-# Should show: slack-claude-bot | online
+# Should show: slack-git-ai-bot | online
+
+curl http://localhost:3000/health
+# Should return: {"status":"ok"}
 ```
 
 Test locally:
@@ -355,7 +363,7 @@ pm2 logs slack-git-ai-bot --lines 20
 ```bash
 nano /opt/slack-git-ai-bot/.env
 # Edit the value, save (Ctrl+X → Y → Enter)
-pm2 restart slack-claude-bot --update-env
+pm2 restart slack-git-ai-bot --update-env
 ```
 
 **Force clean restart** (if bot is stuck or port is busy):
@@ -364,7 +372,7 @@ pm2 kill
 fuser -k 3000/tcp 2>/dev/null
 sleep 2
 cd /opt/slack-git-ai-bot
-pm2 start index.js --name slack-claude-bot
+pm2 start src/index.js --name slack-git-ai-bot
 pm2 save
 ```
 
@@ -415,11 +423,11 @@ nginx -t && systemctl reload nginx
 | Problem | Likely cause | Fix |
 |---------|-------------|-----|
 | `dispatch_failed` | Bot not running | `pm2 start src/index.js --name slack-git-ai-bot` |
-| `operation_timeout` | AI taking too long | Switch to faster model in `claude.js` |
-| `EADDRINUSE :3000` | Old process still running | `fuser -k 3000/tcp && pm2 restart slack-claude-bot` |
+| `operation_timeout` | AI taking too long | Switch to faster model in `config/ai.js` |
+| `EADDRINUSE :3000` | Old process still running | `fuser -k 3000/tcp && pm2 restart slack-git-ai-bot` |
 | GitHub returns wrong files | Keywords not matching | Ask more specific questions |
-| Jira ticket not created | Token expired or wrong project | Check `.env` JIRA_TOKEN and JIRA_PROJECT |
-| Bot answers from docs not code | AI ignoring context | Already fixed in prompt — ensure `claude.js` is latest version |
+| Jira ticket not created | Token expired or wrong project | Check `.env` JIRA_TOKEN and `config/jira.js` (project, host) |
+| Bot answers from docs not code | AI ignoring context | Already fixed in prompt — ensure `config/prompts.js` is latest |
 
 ---
 

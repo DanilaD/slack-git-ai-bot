@@ -1,6 +1,7 @@
 "use strict";
 
 require("dotenv").config();
+const crypto = require("crypto");
 const express = require("express");
 const { fetchGitHubContext } = require("./github");
 const { askQuestion, analyzeTask, generateJiraContent } = require("./ai");
@@ -9,19 +10,67 @@ const { name: aiName, model: aiModel } = require("../config/ai");
 const { repo } = require("../config/github");
 
 const app = express();
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
 
 console.log(`🤖 AI: ${aiName} (${aiModel}) | Repo: ${repo}`);
 
+// ── Slack signature verification ──────────────────────────────
+// Verifies X-Slack-Signature using SLACK_SIGNING_SECRET.
+// Must run before body parsers so the raw body is available.
+
+const verifySlackSignature = (req, res, next) => {
+  const signingSecret = process.env.SLACK_SIGNING_SECRET;
+  if (!signingSecret) {
+    console.warn("[slack] SLACK_SIGNING_SECRET not set — skipping verification");
+    return next();
+  }
+
+  const timestamp = req.headers["x-slack-request-timestamp"];
+  const slackSig  = req.headers["x-slack-signature"];
+
+  // Reject requests older than 5 minutes (replay attack prevention)
+  if (!timestamp || Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) {
+    return res.status(401).json({ error: "Request too old or missing timestamp" });
+  }
+
+  const sigBase = `v0:${timestamp}:${req.rawBody}`;
+  const expected = "v0=" + crypto.createHmac("sha256", signingSecret).update(sigBase).digest("hex");
+
+  if (!crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(slackSig ?? ""))) {
+    return res.status(401).json({ error: "Invalid Slack signature" });
+  }
+
+  next();
+};
+
+// Capture raw body for signature verification, then parse normally
+app.use(
+  express.urlencoded({
+    extended: true,
+    verify: (req, _res, buf) => { req.rawBody = buf.toString(); },
+  })
+);
+app.use(
+  express.json({
+    verify: (req, _res, buf) => { req.rawBody = buf.toString(); },
+  })
+);
+
+// ── Health endpoint ───────────────────────────────────────────
+
+app.get("/health", (_req, res) => res.json({ status: "ok", ai: aiName, model: aiModel, repo }));
+
 // ── Slack helpers ─────────────────────────────────────────────
 
-const slackPost = (url, payload) =>
-  fetch(url, {
+const slackPost = async (url, payload) => {
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+  if (!res.ok) {
+    console.error(`[slack] response_url returned ${res.status}: ${await res.text()}`);
+  }
+};
 
 const slackUpdate = (url, text) =>
   slackPost(url, { response_type: "in_channel", replace_original: true, text });
@@ -43,13 +92,11 @@ const buildAnswerBlocks = (question, answer, sources, label = "Answer") => [
 ];
 
 // ── Generic command runner ────────────────────────────────────
-// Handles the async work for all slash commands after Slack is acknowledged.
 
 const runCommand = (label, aiFn, buildBlocks) => async ({ text, user_id, response_url }) => {
   try {
     const ctx = await fetchGitHubContext(text);
     await slackUpdate(response_url, `_<@${user_id}>:_ *${text}*\n\n📂 Found context. Working...`);
-
     const result = await aiFn(text, ctx);
     await slackPost(response_url, {
       response_type: "in_channel",
@@ -63,22 +110,24 @@ const runCommand = (label, aiFn, buildBlocks) => async ({ text, user_id, respons
 };
 
 // ── Slash command factory ─────────────────────────────────────
-// Creates an Express handler: validates input, acks Slack, runs async.
 
-const slashCommand = ({ label, emptyHint, ackText, run }) => async (req, res) => {
-  const { text, user_id, response_url } = req.body;
+const slashCommand = ({ label, emptyHint, ackText, run }) => [
+  verifySlackSignature,
+  async (req, res) => {
+    const { text, user_id, response_url } = req.body;
 
-  if (!text?.trim()) {
-    return res.json({ response_type: "ephemeral", text: emptyHint });
-  }
+    if (!text?.trim()) {
+      return res.json({ response_type: "ephemeral", text: emptyHint });
+    }
 
-  res.json({ response_type: "in_channel", text: ackText(user_id, text) });
-  setImmediate(() => run({ text, user_id, response_url }));
-};
+    res.json({ response_type: "in_channel", text: ackText(user_id, text) });
+    setImmediate(() => run({ text, user_id, response_url }));
+  },
+];
 
 // ── /ask ──────────────────────────────────────────────────────
 
-app.post("/slack/ask", slashCommand({
+app.post("/slack/ask", ...slashCommand({
   label: "ask",
   emptyHint: "Ask a question. Example: `/ask How does registration work?`",
   ackText: (uid, q) => `_<@${uid}> asked:_ *${q}*\n\n⏳ Searching codebase...`,
@@ -89,7 +138,7 @@ app.post("/slack/ask", slashCommand({
 
 // ── /task ─────────────────────────────────────────────────────
 
-app.post("/slack/task", slashCommand({
+app.post("/slack/task", ...slashCommand({
   label: "task",
   emptyHint: "Describe the task. Example: `/task Add email verification to registration`",
   ackText: (uid, q) => `_<@${uid}> requested task analysis:_ *${q}*\n\n⏳ Analyzing codebase...`,
@@ -104,12 +153,9 @@ const runJira = async ({ text, user_id, response_url }) => {
   try {
     const ctx = await fetchGitHubContext(text);
     await slackUpdate(response_url, `_<@${user_id}>:_ *${text}*\n\n📂 Generating ticket...`);
-
     const content = await generateJiraContent(text, ctx);
     await slackUpdate(response_url, `_<@${user_id}>:_ *${text}*\n\n✍️ Creating Jira ticket...`);
-
     const ticket = await createJiraTicket({ summary: text.slice(0, 200), description: content });
-
     await slackPost(response_url, {
       response_type: "in_channel",
       replace_original: true,
@@ -126,7 +172,7 @@ const runJira = async ({ text, user_id, response_url }) => {
   }
 };
 
-app.post("/slack/jira", slashCommand({
+app.post("/slack/jira", ...slashCommand({
   label: "jira",
   emptyHint: "Describe what to build. Example: `/jira Add email verification to registration`",
   ackText: (uid, q) => `_<@${uid}> creating Jira ticket:_ *${q}*\n\n⏳ Analyzing codebase...`,
@@ -145,5 +191,6 @@ app.post("/slack/events", (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Bot running on port ${PORT}`);
-  console.log(`   /slack/ask  /slack/task  /slack/jira`);
+  console.log(`   GET  /health`);
+  console.log(`   POST /slack/ask  /slack/task  /slack/jira`);
 });

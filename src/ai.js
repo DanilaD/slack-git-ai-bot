@@ -3,7 +3,9 @@
 const { name, model, apiUrl, apiKeyEnv, maxTokens, ACTIVE_PROVIDER } = require("../config/ai");
 const { ASK, TASK, JIRA } = require("../config/prompts");
 
-console.log(`[ai] Provider: ${name} | Model: ${model}`);
+if (process.env.NODE_ENV !== "test") {
+  console.log(`[ai] Provider: ${name} | Model: ${model}`);
+}
 
 // ── Template renderer ─────────────────────────────────────────
 

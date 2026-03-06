@@ -177,23 +177,20 @@ const fetchGitHubContext = async (question) => {
   };
 
   try {
-    // Collect which data types to fetch and run them in parallel
+    // Build all fetchers — type-specific + code search — then run in parallel
     const fetchers = [];
     if (wants.prs(q)) fetchers.push(fetchPRs);
     if (wants.issues(q)) fetchers.push(fetchIssues);
     if (wants.commits(q)) fetchers.push(fetchCommits);
+    fetchers.push(() => fetchCode(question));
 
-    if (fetchers.length) {
-      const results = await Promise.all(fetchers.map((fn) => fn()));
-      results.forEach(add);
-    }
+    const results = await Promise.all(fetchers.map((fn) => fn()));
+    results.forEach((r) => {
+      if (r.text) add(r);
+    });
 
-    // Run code search only when extractable keywords exist
-    const code = await fetchCode(question);
-    if (code.text) {
-      add(code);
-    } else if (!parts.length) {
-      // No keywords and no type-specific data — fall back to repo overview
+    // No results at all — fall back to repo overview
+    if (!parts.length) {
       add(await fetchOverview());
     }
   } catch (err) {

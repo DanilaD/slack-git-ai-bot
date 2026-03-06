@@ -30,6 +30,32 @@ jobs:
       - name: Check Prettier formatting
         run: npm run format:check
 
+  test:
+    name: Unit & Integration Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+        env:
+          # Dummy values — tests mock all external calls
+          SLACK_SIGNING_SECRET: test-slack-secret-32-bytes-ok!!
+          GITHUB_TOKEN: test-github-token
+          GROQ_API_KEY: test-groq-key
+          JIRA_TOKEN: test-jira-token
+
   audit:
     name: Security Audit
     runs-on: ubuntu-latest

@@ -189,8 +189,13 @@ app.post("/slack/events", (req, res) => {
 // ── Start ─────────────────────────────────────────────────────
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`✅ Bot running on port ${PORT}`);
-  console.log(`   GET  /health`);
-  console.log(`   POST /slack/ask  /slack/task  /slack/jira`);
-});
+// Only bind a port when running directly (not during tests)
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`✅ Bot running on port ${PORT}`);
+    console.log(`   GET  /health`);
+    console.log(`   POST /slack/ask  /slack/task  /slack/jira`);
+  });
+}
+
+module.exports = app;

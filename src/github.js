@@ -8,6 +8,8 @@ const {
   maxPRs,
   maxIssues,
   maxCommits,
+  docPaths,
+  maxDocChars,
 } = require("../config/github");
 const STOP_WORDS = require("../config/stopwords");
 
@@ -164,9 +166,41 @@ const fetchOverview = async () => {
   };
 };
 
+// ── Markdown doc fetcher ──────────────────────────────────────
+
+const fetchMarkdownDocs = async () => {
+  if (!docPaths || !docPaths.length) return { text: "", sources: [] };
+
+  const results = await Promise.allSettled(
+    docPaths.map(async (path) => {
+      try {
+        const { data } = await octokit.repos.getContent({ owner, repo, path });
+        const content = Buffer.from(data.content, "base64").toString("utf-8").slice(0, maxDocChars);
+        return {
+          text: `### ${path}\n${content}`,
+          source: { label: path, url: data.html_url },
+        };
+      } catch {
+        return null; // 404 or other error — skip silently
+      }
+    })
+  );
+
+  const docs = results
+    .filter((r) => r.status === "fulfilled" && r.value !== null)
+    .map((r) => r.value);
+
+  if (!docs.length) return { text: "", sources: [] };
+
+  return {
+    text: `## Documentation\n\n` + docs.map((d) => d.text).join("\n\n"),
+    sources: docs.map((d) => d.source),
+  };
+};
+
 // ── Main entry ────────────────────────────────────────────────
 
-const fetchGitHubContext = async (question) => {
+const fetchGitHubContext = async (question, { includeDocs = false } = {}) => {
   const q = question.toLowerCase();
   const parts = [];
   const sources = [];
@@ -183,6 +217,7 @@ const fetchGitHubContext = async (question) => {
     if (wants.issues(q)) fetchers.push(fetchIssues);
     if (wants.commits(q)) fetchers.push(fetchCommits);
     fetchers.push(() => fetchCode(question));
+    if (includeDocs) fetchers.push(fetchMarkdownDocs);
 
     const results = await Promise.all(fetchers.map((fn) => fn()));
     results.forEach((r) => {
@@ -201,4 +236,4 @@ const fetchGitHubContext = async (question) => {
   return { text: parts.join("\n\n---\n\n"), sources };
 };
 
-module.exports = { fetchGitHubContext };
+module.exports = { fetchGitHubContext, fetchMarkdownDocs };

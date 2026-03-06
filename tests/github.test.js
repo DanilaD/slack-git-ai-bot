@@ -19,12 +19,12 @@ jest.mock("../config/github", () => ({
   maxPRs: 5,
   maxIssues: 5,
   maxCommits: 5,
+  docPaths: ["README.md", "CONTRIBUTING.md"],
+  maxDocChars: 1000,
 }));
 
 // Use the real stopwords file so keyword filtering is tested accurately
-jest.mock("../config/stopwords", () =>
-  jest.requireActual("../config/stopwords")
-);
+jest.mock("../config/stopwords", () => jest.requireActual("../config/stopwords"));
 
 // ── Mock Octokit ──────────────────────────────────────────────
 
@@ -102,7 +102,15 @@ describe("fetchGitHubContext — PR queries", () => {
   test("fetches PRs when question mentions 'pull request'", async () => {
     mockOctokit.pulls.list.mockResolvedValue({ data: [makePR(1), makePR(2)] });
     mockOctokit.search.code.mockResolvedValue({ data: { items: [] } });
-    mockOctokit.repos.get.mockResolvedValue({ data: { full_name: "t/r", description: "", default_branch: "main", open_issues_count: 0, html_url: "https://github.com/t/r" } });
+    mockOctokit.repos.get.mockResolvedValue({
+      data: {
+        full_name: "t/r",
+        description: "",
+        default_branch: "main",
+        open_issues_count: 0,
+        html_url: "https://github.com/t/r",
+      },
+    });
     mockOctokit.repos.getContent.mockResolvedValue({ data: [] });
     mockOctokit.repos.getReadme.mockRejectedValue(new Error("no readme"));
 
@@ -117,7 +125,15 @@ describe("fetchGitHubContext — PR queries", () => {
   test("returns 'No open pull requests' when list is empty", async () => {
     mockOctokit.pulls.list.mockResolvedValue({ data: [] });
     mockOctokit.search.code.mockResolvedValue({ data: { items: [] } });
-    mockOctokit.repos.get.mockResolvedValue({ data: { full_name: "t/r", description: "", default_branch: "main", open_issues_count: 0, html_url: "https://github.com/t/r" } });
+    mockOctokit.repos.get.mockResolvedValue({
+      data: {
+        full_name: "t/r",
+        description: "",
+        default_branch: "main",
+        open_issues_count: 0,
+        html_url: "https://github.com/t/r",
+      },
+    });
     mockOctokit.repos.getContent.mockResolvedValue({ data: [] });
     mockOctokit.repos.getReadme.mockRejectedValue(new Error("no readme"));
 
@@ -133,7 +149,15 @@ describe("fetchGitHubContext — issue queries", () => {
       data: [makeIssue(10), makeIssue(11, true)],
     });
     mockOctokit.search.code.mockResolvedValue({ data: { items: [] } });
-    mockOctokit.repos.get.mockResolvedValue({ data: { full_name: "t/r", description: "", default_branch: "main", open_issues_count: 1, html_url: "https://github.com/t/r" } });
+    mockOctokit.repos.get.mockResolvedValue({
+      data: {
+        full_name: "t/r",
+        description: "",
+        default_branch: "main",
+        open_issues_count: 1,
+        html_url: "https://github.com/t/r",
+      },
+    });
     mockOctokit.repos.getContent.mockResolvedValue({ data: [] });
     mockOctokit.repos.getReadme.mockRejectedValue(new Error("no readme"));
 
@@ -152,7 +176,15 @@ describe("fetchGitHubContext — commit queries", () => {
       data: [makeCommit("abc1234", "Fix login bug"), makeCommit("def5678", "Add tests")],
     });
     mockOctokit.search.code.mockResolvedValue({ data: { items: [] } });
-    mockOctokit.repos.get.mockResolvedValue({ data: { full_name: "t/r", description: "", default_branch: "main", open_issues_count: 0, html_url: "https://github.com/t/r" } });
+    mockOctokit.repos.get.mockResolvedValue({
+      data: {
+        full_name: "t/r",
+        description: "",
+        default_branch: "main",
+        open_issues_count: 0,
+        html_url: "https://github.com/t/r",
+      },
+    });
     mockOctokit.repos.getContent.mockResolvedValue({ data: [] });
     mockOctokit.repos.getReadme.mockRejectedValue(new Error("no readme"));
 
@@ -170,7 +202,15 @@ describe("fetchGitHubContext — parallel fetch", () => {
     mockOctokit.pulls.list.mockResolvedValue({ data: [makePR(5)] });
     mockOctokit.issues.listForRepo.mockResolvedValue({ data: [makeIssue(20)] });
     mockOctokit.search.code.mockResolvedValue({ data: { items: [] } });
-    mockOctokit.repos.get.mockResolvedValue({ data: { full_name: "t/r", description: "", default_branch: "main", open_issues_count: 1, html_url: "https://github.com/t/r" } });
+    mockOctokit.repos.get.mockResolvedValue({
+      data: {
+        full_name: "t/r",
+        description: "",
+        default_branch: "main",
+        open_issues_count: 1,
+        html_url: "https://github.com/t/r",
+      },
+    });
     mockOctokit.repos.getContent.mockResolvedValue({ data: [] });
     mockOctokit.repos.getReadme.mockRejectedValue(new Error("no readme"));
 
@@ -205,7 +245,13 @@ describe("fetchGitHubContext — code search", () => {
   test("does NOT call search.code when question has no extractable keywords", async () => {
     // "what is this" → all stop words → extractKeywords returns [] → no API call
     mockOctokit.repos.get.mockResolvedValue({
-      data: { full_name: "testowner/testrepo", description: "test repo", default_branch: "main", open_issues_count: 0, html_url: "https://github.com/t/r" },
+      data: {
+        full_name: "testowner/testrepo",
+        description: "test repo",
+        default_branch: "main",
+        open_issues_count: 0,
+        html_url: "https://github.com/t/r",
+      },
     });
     mockOctokit.repos.getContent.mockResolvedValue({ data: [] });
     mockOctokit.repos.getReadme.mockRejectedValue(new Error("no readme"));
@@ -231,12 +277,109 @@ describe("fetchGitHubContext — error handling", () => {
   });
 });
 
+describe("fetchMarkdownDocs", () => {
+  test("returns doc content and sources for found files", async () => {
+    const readmeContent = Buffer.from("# Project README\nThis is the readme.").toString("base64");
+    const contributingContent = Buffer.from("# Contributing\nHow to contribute.").toString(
+      "base64"
+    );
+
+    mockOctokit.repos.getContent
+      .mockResolvedValueOnce({
+        data: { content: readmeContent, html_url: "https://github.com/t/r/blob/main/README.md" },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          content: contributingContent,
+          html_url: "https://github.com/t/r/blob/main/CONTRIBUTING.md",
+        },
+      });
+
+    const result = await github.fetchMarkdownDocs();
+
+    expect(result.text).toContain("## Documentation");
+    expect(result.text).toContain("README.md");
+    expect(result.text).toContain("Project README");
+    expect(result.text).toContain("CONTRIBUTING.md");
+    expect(result.sources).toHaveLength(2);
+    expect(result.sources[0].label).toBe("README.md");
+  });
+
+  test("skips missing docs gracefully (404)", async () => {
+    const readmeContent = Buffer.from("# README").toString("base64");
+
+    mockOctokit.repos.getContent
+      .mockResolvedValueOnce({
+        data: { content: readmeContent, html_url: "https://github.com/t/r/blob/main/README.md" },
+      })
+      .mockRejectedValueOnce(new Error("Not Found"));
+
+    const result = await github.fetchMarkdownDocs();
+
+    expect(result.text).toContain("README.md");
+    expect(result.sources).toHaveLength(1); // only README, CONTRIBUTING was 404
+  });
+
+  test("returns empty result when all docs are 404", async () => {
+    mockOctokit.repos.getContent.mockRejectedValue(new Error("Not Found"));
+
+    const result = await github.fetchMarkdownDocs();
+
+    expect(result.text).toBe("");
+    expect(result.sources).toHaveLength(0);
+  });
+
+  test("fetchGitHubContext includes docs when includeDocs is true", async () => {
+    const readmeContent = Buffer.from("# README content").toString("base64");
+    mockOctokit.search.code.mockResolvedValue({ data: { items: [] } });
+    mockOctokit.repos.get.mockResolvedValue({
+      data: {
+        full_name: "t/r",
+        description: "",
+        default_branch: "main",
+        open_issues_count: 0,
+        html_url: "https://github.com/t/r",
+      },
+    });
+    mockOctokit.repos.getContent
+      .mockResolvedValueOnce({
+        data: { content: readmeContent, html_url: "https://github.com/t/r/blob/main/README.md" },
+      })
+      .mockRejectedValue(new Error("Not Found"));
+    mockOctokit.repos.getReadme.mockRejectedValue(new Error("no readme"));
+
+    const ctx = await github.fetchGitHubContext("how do I set up the project", {
+      includeDocs: true,
+    });
+
+    expect(ctx.text).toContain("Documentation");
+    expect(ctx.text).toContain("README content");
+  });
+
+  test("fetchGitHubContext does NOT include docs by default", async () => {
+    const fileContent = Buffer.from("function login() {}").toString("base64");
+    mockOctokit.search.code.mockResolvedValue({
+      data: { items: [makeCodeItem("src/auth.js")] },
+    });
+    mockOctokit.repos.getContent.mockResolvedValue({ data: { content: fileContent } });
+
+    const ctx = await github.fetchGitHubContext("login function");
+
+    // getContent called once (for the code file), not for README/CONTRIBUTING
+    expect(ctx.text).not.toContain("## Documentation");
+  });
+});
+
 describe("module load validation", () => {
   test("throws at load time if GITHUB_TOKEN is missing", () => {
     jest.resetModules();
     jest.mock("../config/github", () => ({
       repo: "testowner/testrepo",
-      maxCodeFiles: 2, maxFileChars: 500, maxPRs: 5, maxIssues: 5, maxCommits: 5,
+      maxCodeFiles: 2,
+      maxFileChars: 500,
+      maxPRs: 5,
+      maxIssues: 5,
+      maxCommits: 5,
     }));
     jest.mock("../config/stopwords", () => jest.requireActual("../config/stopwords"));
     jest.mock("@octokit/rest", () => ({ Octokit: jest.fn(() => mockOctokit) }));

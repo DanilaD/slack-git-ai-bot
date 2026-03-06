@@ -12,4 +12,6 @@ module.exports = {
   maxPRs: 10, // max open PRs to fetch
   maxIssues: 15, // max open issues to fetch
   maxCommits: 10, // max recent commits to fetch
+  docPaths: ["README.md", "CONTRIBUTING.md"], // markdown docs to include in /ask context
+  maxDocChars: 3000, // max characters to read per doc file
 };

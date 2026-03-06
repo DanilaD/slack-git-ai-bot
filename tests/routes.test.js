@@ -12,9 +12,9 @@ const request = require("supertest");
 
 // ── Env vars required at module load ─────────────────────────
 process.env.SLACK_SIGNING_SECRET = "test-slack-secret-32-bytes-ok!!";
-process.env.GITHUB_TOKEN   = "test-github-token";
-process.env.GROQ_API_KEY   = "test-groq-key";
-process.env.JIRA_TOKEN     = "test-jira-token";
+process.env.GITHUB_TOKEN = "test-github-token";
+process.env.GROQ_API_KEY = "test-groq-key";
+process.env.JIRA_TOKEN = "test-jira-token";
 
 // ── Mock all external modules ─────────────────────────────────
 
@@ -34,6 +34,8 @@ jest.mock("../config/github", () => ({
   maxPRs: 5,
   maxIssues: 5,
   maxCommits: 5,
+  docPaths: ["README.md"],
+  maxDocChars: 1000,
 }));
 
 jest.mock("../config/jira", () => ({
@@ -48,13 +50,15 @@ jest.mock("../src/github", () => ({
 }));
 
 jest.mock("../src/ai", () => ({
-  askQuestion:         jest.fn().mockResolvedValue("mocked answer"),
-  analyzeTask:         jest.fn().mockResolvedValue("mocked plan"),
+  askQuestion: jest.fn().mockResolvedValue("mocked answer"),
+  analyzeTask: jest.fn().mockResolvedValue("mocked plan"),
   generateJiraContent: jest.fn().mockResolvedValue("mocked ticket body"),
 }));
 
 jest.mock("../src/jira", () => ({
-  createJiraTicket: jest.fn().mockResolvedValue({ key: "TEST-1", url: "https://test.atlassian.net/browse/TEST-1" }),
+  createJiraTicket: jest
+    .fn()
+    .mockResolvedValue({ key: "TEST-1", url: "https://test.atlassian.net/browse/TEST-1" }),
 }));
 
 // Mock global fetch (used by slackPost)
@@ -78,10 +82,9 @@ const SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET;
 function signedSlackRequest(body) {
   const rawBody = new URLSearchParams(body).toString();
   const timestamp = String(Math.floor(Date.now() / 1000));
-  const sig = "v0=" + crypto
-    .createHmac("sha256", SIGNING_SECRET)
-    .update(`v0:${timestamp}:${rawBody}`)
-    .digest("hex");
+  const sig =
+    "v0=" +
+    crypto.createHmac("sha256", SIGNING_SECRET).update(`v0:${timestamp}:${rawBody}`).digest("hex");
   return { rawBody, timestamp, sig };
 }
 
@@ -132,7 +135,11 @@ describe("POST /slack/ask", () => {
   });
 
   test("acks immediately with 200 when text is provided", async () => {
-    const body = { text: "how does auth work", user_id: "U456", response_url: "https://hooks.slack.com/test" };
+    const body = {
+      text: "how does auth work",
+      user_id: "U456",
+      response_url: "https://hooks.slack.com/test",
+    };
     const { rawBody, timestamp, sig } = signedSlackRequest(body);
 
     const res = await request(app)
@@ -147,11 +154,35 @@ describe("POST /slack/ask", () => {
     expect(res.body.text).toContain("U456");
   });
 
+  test("calls fetchGitHubContext with includeDocs: true", async () => {
+    const { fetchGitHubContext } = require("../src/github");
+    const body = {
+      text: "how does auth work",
+      user_id: "U789",
+      response_url: "https://hooks.slack.com/test",
+    };
+    const { rawBody, timestamp, sig } = signedSlackRequest(body);
+
+    await request(app)
+      .post("/slack/ask")
+      .set("x-slack-request-timestamp", timestamp)
+      .set("x-slack-signature", sig)
+      .type("form")
+      .send(rawBody);
+
+    // setImmediate runs async — give it a tick
+    await new Promise((r) => setImmediate(r));
+
+    expect(fetchGitHubContext).toHaveBeenCalledWith("how does auth work", { includeDocs: true });
+  });
+
   test("rejects a stale timestamp", async () => {
     const body = { text: "test", user_id: "U123", response_url: "https://hooks.slack.com/test" };
     const rawBody = new URLSearchParams(body).toString();
     const staleTs = String(Math.floor(Date.now() / 1000) - 400);
-    const sig = "v0=" + crypto.createHmac("sha256", SIGNING_SECRET).update(`v0:${staleTs}:${rawBody}`).digest("hex");
+    const sig =
+      "v0=" +
+      crypto.createHmac("sha256", SIGNING_SECRET).update(`v0:${staleTs}:${rawBody}`).digest("hex");
 
     const res = await request(app)
       .post("/slack/ask")

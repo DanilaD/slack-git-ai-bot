@@ -88,28 +88,47 @@ const slackError = (url, message) =>
 
 const mrkdwn = (text) => ({ type: "mrkdwn", text });
 
-const buildAnswerBlocks = (question, answer, sources, label = "Answer") => [
-  { type: "section", text: mrkdwn(`*Question:* ${question}`) },
-  { type: "divider" },
-  { type: "section", text: mrkdwn(`*${label}:*\n${answer}`) },
-  ...(sources.length > 0
-    ? [
-        { type: "divider" },
-        {
-          type: "context",
-          elements: [
-            mrkdwn(
-              `📂 *Sources:*\n${sources
-                .slice(0, 5)
-                .map((s) => `• <${s.url}|${s.label}>`)
-                .join("\n")}`
-            ),
-          ],
-        },
-      ]
-    : []),
-  { type: "context", elements: [mrkdwn(`🤖 ${aiName} (${aiModel}) | ${repo}`)] },
-];
+// Slack section blocks max out at 3001 chars. Split long text into chunks.
+const SLACK_BLOCK_LIMIT = 2900;
+const chunkText = (text) => {
+  const chunks = [];
+  let remaining = text;
+  while (remaining.length > SLACK_BLOCK_LIMIT) {
+    // Try to split on a newline near the limit to avoid cutting mid-sentence
+    let splitAt = remaining.lastIndexOf("\n", SLACK_BLOCK_LIMIT);
+    if (splitAt < SLACK_BLOCK_LIMIT / 2) splitAt = SLACK_BLOCK_LIMIT;
+    chunks.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt).trimStart();
+  }
+  if (remaining.length > 0) chunks.push(remaining);
+  return chunks;
+};
+
+const buildAnswerBlocks = (question, answer, sources, label = "Answer") => {
+  const answerChunks = chunkText(`*${label}:*\n${answer}`);
+  return [
+    { type: "section", text: mrkdwn(`*Question:* ${question}`) },
+    { type: "divider" },
+    ...answerChunks.map((chunk) => ({ type: "section", text: mrkdwn(chunk) })),
+    ...(sources.length > 0
+      ? [
+          { type: "divider" },
+          {
+            type: "context",
+            elements: [
+              mrkdwn(
+                `📂 *Sources:*\n${sources
+                  .slice(0, 5)
+                  .map((s) => `• <${s.url}|${s.label}>`)
+                  .join("\n")}`
+              ),
+            ],
+          },
+        ]
+      : []),
+    { type: "context", elements: [mrkdwn(`🤖 ${aiName} (${aiModel}) | ${repo}`)] },
+  ];
+};
 
 // ── Generic command runner ────────────────────────────────────
 

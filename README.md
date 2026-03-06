@@ -484,3 +484,5 @@ Registered at [api.slack.com/apps](https://api.slack.com/apps) — create a **Sl
 /jira Add email verification to the registration flow
 /jira Create a dashboard for buyer analytics
 ```
+
+<!-- deploy-test: 2026-03-06 -->

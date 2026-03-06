@@ -155,6 +155,188 @@ When `/jira` is used, the bot:
 
 ---
 
+## Manual Installation
+
+This section covers setting up a fresh Ubuntu/Debian server from scratch.
+
+### Prerequisites
+
+You need these four things installed on the server:
+
+| Component | Required version | What it does |
+|-----------|-----------------|--------------|
+| Node.js | v20 LTS | Runs the bot |
+| npm | v9+ (comes with Node) | Installs packages |
+| PM2 | latest | Keeps bot alive 24/7 |
+| nginx | latest | Routes Slack HTTP requests to the bot |
+
+---
+
+### Step 1 — Check what's already installed
+
+SSH into your server and run these checks:
+
+```bash
+# Check Node.js
+node -v
+# Expected: v20.x.x  (if not installed, see below)
+
+# Check npm
+npm -v
+# Expected: 9.x.x or higher
+
+# Check PM2
+pm2 -v
+# Expected: 5.x.x  (if not installed, see below)
+
+# Check nginx
+nginx -v
+# Expected: nginx/1.x.x  (if not installed, see below)
+
+# Check git
+git --version
+# Expected: git version 2.x.x
+```
+
+---
+
+### Step 2 — Install missing components
+
+**Install Node.js v20 LTS** (if `node -v` fails or shows wrong version):
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt-get install -y nodejs
+node -v   # should now show v20.x.x
+```
+
+**Install PM2** (if `pm2 -v` fails):
+```bash
+npm install -g pm2
+pm2 -v
+```
+
+**Install nginx** (if `nginx -v` fails):
+```bash
+apt-get install -y nginx
+systemctl enable nginx
+systemctl start nginx
+nginx -v
+```
+
+**Install git** (if `git --version` fails):
+```bash
+apt-get install -y git
+```
+
+---
+
+### Step 3 — Deploy the bot
+
+```bash
+# Clone the repo
+git clone https://github.com/DanilaD/slack-git-ai-bot.git /opt/slack-claude-bot
+
+# Install dependencies
+cd /opt/slack-claude-bot
+npm install --production
+
+# Create your .env file
+cp .env.example .env
+nano .env   # fill in all tokens (see Environment Variables section above)
+```
+
+---
+
+### Step 4 — Configure nginx
+
+```bash
+# Create nginx config
+cat > /etc/nginx/sites-available/slack-bot << 'EOF'
+server {
+    listen 80;
+    server_name _;
+
+    location /slack/ {
+        proxy_pass http://127.0.0.1:3000/slack/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 60s;
+    }
+}
+EOF
+
+# Enable and reload
+ln -sf /etc/nginx/sites-available/slack-bot /etc/nginx/sites-enabled/slack-bot
+rm -f /etc/nginx/sites-enabled/default
+nginx -t && systemctl reload nginx
+```
+
+---
+
+### Step 5 — Start the bot
+
+```bash
+cd /opt/slack-claude-bot
+pm2 start index.js --name slack-claude-bot
+pm2 save
+pm2 startup   # run the printed command to auto-start on reboot
+```
+
+Verify it's running:
+```bash
+pm2 status
+# Should show: slack-claude-bot | online
+```
+
+Test locally:
+```bash
+curl -X POST http://localhost:3000/slack/ask \
+  -d "text=test&response_url=http://example.com"
+# Should return JSON with "Thinking..." text
+```
+
+---
+
+### How to Update the Bot
+
+When new code is pushed to GitHub, update the server like this:
+
+```bash
+# Pull latest code
+cd /opt/slack-claude-bot
+git pull origin main
+
+# Install any new dependencies
+npm install --production
+
+# Restart bot to load new code
+pm2 restart slack-claude-bot --update-env
+
+# Confirm it restarted cleanly
+pm2 status
+pm2 logs slack-claude-bot --lines 20
+```
+
+**Update a single token or config value:**
+```bash
+nano /opt/slack-claude-bot/.env
+# Edit the value, save (Ctrl+X → Y → Enter)
+pm2 restart slack-claude-bot --update-env
+```
+
+**Force clean restart** (if bot is stuck or port is busy):
+```bash
+pm2 kill
+fuser -k 3000/tcp 2>/dev/null
+sleep 2
+cd /opt/slack-claude-bot
+pm2 start index.js --name slack-claude-bot
+pm2 save
+```
+
+---
+
 ## Common Commands (on server)
 
 ```bash

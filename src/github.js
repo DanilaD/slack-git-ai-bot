@@ -10,6 +10,7 @@ const {
   maxCommits,
   docPaths,
   maxDocChars,
+  codebaseOverviewPath,
 } = require("../config/github");
 const STOP_WORDS = require("../config/stopwords");
 
@@ -198,6 +199,31 @@ const fetchMarkdownDocs = async () => {
   };
 };
 
+// ── Codebase overview fetcher ─────────────────────────────────
+// Fetches CODEBASE.md (or the path set in config) from the repo root.
+// Skips silently when the file doesn't exist, is empty, or path is null.
+
+const fetchCodebaseOverview = async () => {
+  if (!codebaseOverviewPath) return { text: "", sources: [] };
+
+  try {
+    const { data } = await octokit.repos.getContent({
+      owner,
+      repo,
+      path: codebaseOverviewPath,
+    });
+    const content = Buffer.from(data.content, "base64").toString("utf-8").trim();
+    if (!content) return { text: "", sources: [] };
+
+    return {
+      text: `## Codebase Overview\n\n${content.slice(0, maxDocChars)}`,
+      sources: [{ label: codebaseOverviewPath, url: data.html_url }],
+    };
+  } catch {
+    return { text: "", sources: [] }; // 404 or other error — skip silently
+  }
+};
+
 // ── Main entry ────────────────────────────────────────────────
 
 const fetchGitHubContext = async (question, { includeDocs = false } = {}) => {
@@ -217,7 +243,10 @@ const fetchGitHubContext = async (question, { includeDocs = false } = {}) => {
     if (wants.issues(q)) fetchers.push(fetchIssues);
     if (wants.commits(q)) fetchers.push(fetchCommits);
     fetchers.push(() => fetchCode(question));
-    if (includeDocs) fetchers.push(fetchMarkdownDocs);
+    if (includeDocs) {
+      fetchers.push(fetchMarkdownDocs);
+      fetchers.push(fetchCodebaseOverview);
+    }
 
     const results = await Promise.all(fetchers.map((fn) => fn()));
     results.forEach((r) => {
@@ -236,4 +265,4 @@ const fetchGitHubContext = async (question, { includeDocs = false } = {}) => {
   return { text: parts.join("\n\n---\n\n"), sources };
 };
 
-module.exports = { fetchGitHubContext, fetchMarkdownDocs };
+module.exports = { fetchGitHubContext, fetchMarkdownDocs, fetchCodebaseOverview };

@@ -14,4 +14,5 @@ module.exports = {
   maxCommits: 10, // max recent commits to fetch
   docPaths: ["README.md", "CONTRIBUTING.md"], // markdown docs to include in /ask context
   maxDocChars: 3000, // max characters to read per doc file
+  codebaseOverviewPath: "CODEBASE.md", // path from repo root to codebase overview file; set null to disable
 };

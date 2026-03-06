@@ -27,7 +27,13 @@ function verifySlackSignature(signingSecret, timestamp, slackSig, rawBody) {
     return { ok: false, status: 401, error: "Request too old or missing timestamp" };
   }
   const expected = makeSignature(signingSecret, timestamp, rawBody);
-  if (!crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(slackSig ?? ""))) {
+
+  // Guard: timingSafeEqual requires equal-length buffers (matches production behaviour)
+  const expectedBuf = Buffer.from(expected, "utf8");
+  const sigBuf      = Buffer.from(slackSig ?? "", "utf8");
+
+  if (expectedBuf.length !== sigBuf.length ||
+      !crypto.timingSafeEqual(expectedBuf, sigBuf)) {
     return { ok: false, status: 401, error: "Invalid Slack signature" };
   }
   return { ok: true };
@@ -83,17 +89,10 @@ describe("verifySlackSignature", () => {
 
   test("rejects a missing signature", () => {
     const ts = freshTimestamp();
-    // timingSafeEqual requires equal-length buffers; the implementation
-    // pads the missing sig to empty string which has different length — so
-    // we expect it to throw OR return ok:false depending on implementation.
-    // Either outcome correctly rejects the request.
-    let result;
-    try {
-      result = verifySlackSignature(SIGNING_SECRET, ts, undefined, body);
-    } catch {
-      result = { ok: false };
-    }
+    // undefined sig → empty string → different length from expected → early reject
+    const result = verifySlackSignature(SIGNING_SECRET, ts, undefined, body);
     expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/Invalid Slack signature/);
   });
 
   test("rejects an empty body with a signature built for non-empty body", () => {

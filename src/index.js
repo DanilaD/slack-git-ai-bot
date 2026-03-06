@@ -35,7 +35,12 @@ const verifySlackSignature = (req, res, next) => {
   const sigBase = `v0:${timestamp}:${req.rawBody}`;
   const expected = "v0=" + crypto.createHmac("sha256", signingSecret).update(sigBase).digest("hex");
 
-  if (!crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(slackSig ?? ""))) {
+  // timingSafeEqual requires equal-length buffers — reject early if lengths differ
+  const expectedBuf = Buffer.from(expected, "utf8");
+  const sigBuf      = Buffer.from(slackSig ?? "", "utf8");
+
+  if (expectedBuf.length !== sigBuf.length ||
+      !crypto.timingSafeEqual(expectedBuf, sigBuf)) {
     return res.status(401).json({ error: "Invalid Slack signature" });
   }
 

@@ -1,8 +1,11 @@
 "use strict";
 
-require("dotenv").config();
 const { Octokit } = require("@octokit/rest");
 const { repo: repoSlug, maxCodeFiles, maxFileChars, maxPRs, maxIssues, maxCommits } = require("../config/github");
+const STOP_WORDS = require("../config/stopwords");
+
+// Fail fast if token is missing (mirrors jira.js behaviour)
+if (!process.env.GITHUB_TOKEN) throw new Error("Missing GITHUB_TOKEN in .env");
 
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 
@@ -11,11 +14,6 @@ const [owner, repo] = repoSlug.split("/");
 if (!owner || !repo) throw new Error(`config/github.js: repo must be "owner/repo", got "${repoSlug}"`);
 
 // ── Keyword extraction ────────────────────────────────────────
-
-const STOP_WORDS = new Set([
-  "what", "does", "how", "the", "is", "are", "can", "explain",
-  "tell", "me", "about", "a", "an", "in", "for", "of", "and", "to", "this",
-]);
 
 const extractKeywords = (text) =>
   text.toLowerCase()
@@ -140,15 +138,23 @@ const fetchGitHubContext = async (question) => {
   const add = ({ text, sources: s }) => { parts.push(text); sources.push(...s); };
 
   try {
-    if (wants.prs(q))     add(await fetchPRs());
-    if (wants.issues(q))  add(await fetchIssues());
-    if (wants.commits(q)) add(await fetchCommits());
+    // Collect which data types to fetch and run them in parallel
+    const fetchers = [];
+    if (wants.prs(q))     fetchers.push(fetchPRs);
+    if (wants.issues(q))  fetchers.push(fetchIssues);
+    if (wants.commits(q)) fetchers.push(fetchCommits);
 
-    // Always try code search — fall back to overview if nothing found
+    if (fetchers.length) {
+      const results = await Promise.all(fetchers.map((fn) => fn()));
+      results.forEach(add);
+    }
+
+    // Run code search only when extractable keywords exist
     const code = await fetchCode(question);
     if (code.text) {
       add(code);
     } else if (!parts.length) {
+      // No keywords and no type-specific data — fall back to repo overview
       add(await fetchOverview());
     }
   } catch (err) {

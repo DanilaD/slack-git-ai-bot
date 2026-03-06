@@ -1,6 +1,5 @@
 "use strict";
 
-require("dotenv").config();
 const { name, model, apiUrl, apiKeyEnv, maxTokens, ACTIVE_PROVIDER } = require("../config/ai");
 const { ASK, TASK, JIRA } = require("../config/prompts");
 

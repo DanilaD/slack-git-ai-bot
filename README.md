@@ -106,7 +106,8 @@ slack-git-ai-bot/
 │   ├── ai.js         # ← Switch AI provider + model here
 │   ├── github.js     # ← Set repo name and fetch limits here
 │   ├── jira.js       # ← Set Jira host, project key, email here
-│   └── prompts.js    # ← Edit all AI prompts here
+│   ├── prompts.js    # ← Edit all AI prompts here
+│   └── stopwords.js  # ← Add/remove words excluded from code search keywords
 ├── .env              # SECRET tokens only — never commit this file
 ├── .env.example      # Template — copy to .env and fill in tokens
 ├── ecosystem.config.js
@@ -162,7 +163,9 @@ When you run a slash command, `src/github.js` extracts keywords from your messag
 - **Recent commits** — if question is about recent changes
 - **Repo overview + README** — as fallback if nothing else matches
 
-The fetched code is sent to the AI along with your question so it answers based on your actual codebase, not generic knowledge.
+When a question matches multiple data types (e.g. "project status"), PRs, issues, and commits are fetched **in parallel** to minimize latency.
+
+**Keyword tuning:** Common words like "what", "how", "the", etc. are filtered out before building the code search query. The full list is in `config/stopwords.js` — add or remove entries there to adjust which words are ignored.
 
 ---
 
@@ -425,9 +428,10 @@ nginx -t && systemctl reload nginx
 | `dispatch_failed` | Bot not running | `pm2 start src/index.js --name slack-git-ai-bot` |
 | `operation_timeout` | AI taking too long | Switch to faster model in `config/ai.js` |
 | `EADDRINUSE :3000` | Old process still running | `fuser -k 3000/tcp && pm2 restart slack-git-ai-bot` |
-| GitHub returns wrong files | Keywords not matching | Ask more specific questions |
+| GitHub returns wrong files | Keywords not matching | Ask more specific questions; tune `config/stopwords.js` |
 | Jira ticket not created | Token expired or wrong project | Check `.env` JIRA_TOKEN and `config/jira.js` (project, host) |
 | Bot answers from docs not code | AI ignoring context | Already fixed in prompt — ensure `config/prompts.js` is latest |
+| `401 Invalid Slack signature` | Wrong or missing `SLACK_SIGNING_SECRET` | Copy signing secret from api.slack.com/apps → Basic Information → Signing Secret into `.env` |
 
 ---
 

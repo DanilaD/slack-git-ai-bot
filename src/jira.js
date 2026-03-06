@@ -1,6 +1,5 @@
 "use strict";
 
-require("dotenv").config();
 const { host, email, project, defaultIssueType } = require("../config/jira");
 
 // Build once at module load — token must be set before this module is required

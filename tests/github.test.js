@@ -4,7 +4,8 @@
  * Unit tests for src/github.js
  *
  * We mock @octokit/rest to avoid real GitHub API calls.
- * Tests cover: keyword extraction, `wants` matcher, and fetchGitHubContext routing.
+ * Tests cover: keyword extraction, `wants` matcher, parallel fetch,
+ * code search, overview fallback, and error handling.
  */
 
 process.env.GITHUB_TOKEN = "test-github-token";
@@ -19,6 +20,11 @@ jest.mock("../config/github", () => ({
   maxIssues: 5,
   maxCommits: 5,
 }));
+
+// Use the real stopwords file so keyword filtering is tested accurately
+jest.mock("../config/stopwords", () =>
+  jest.requireActual("../config/stopwords")
+);
 
 // ── Mock Octokit ──────────────────────────────────────────────
 
@@ -158,6 +164,27 @@ describe("fetchGitHubContext — commit queries", () => {
   });
 });
 
+describe("fetchGitHubContext — parallel fetch", () => {
+  test("fetches PRs and issues in parallel when question matches both", async () => {
+    // "status" triggers both prs and issues matchers
+    mockOctokit.pulls.list.mockResolvedValue({ data: [makePR(5)] });
+    mockOctokit.issues.listForRepo.mockResolvedValue({ data: [makeIssue(20)] });
+    mockOctokit.search.code.mockResolvedValue({ data: { items: [] } });
+    mockOctokit.repos.get.mockResolvedValue({ data: { full_name: "t/r", description: "", default_branch: "main", open_issues_count: 1, html_url: "https://github.com/t/r" } });
+    mockOctokit.repos.getContent.mockResolvedValue({ data: [] });
+    mockOctokit.repos.getReadme.mockRejectedValue(new Error("no readme"));
+
+    const ctx = await github.fetchGitHubContext("project status");
+
+    // Both should have been called (run in parallel via Promise.all)
+    expect(mockOctokit.pulls.list).toHaveBeenCalledTimes(1);
+    expect(mockOctokit.issues.listForRepo).toHaveBeenCalledTimes(1);
+    // Both results should appear in output
+    expect(ctx.text).toContain("PR 5");
+    expect(ctx.text).toContain("Issue 20");
+  });
+});
+
 describe("fetchGitHubContext — code search", () => {
   test("searches code and returns file content", async () => {
     const fileContent = Buffer.from("function login() { /* ... */ }").toString("base64");
@@ -175,9 +202,8 @@ describe("fetchGitHubContext — code search", () => {
     expect(ctx.sources[0].label).toBe("src/auth.js");
   });
 
-  test("falls back to repo overview when no keywords can be extracted", async () => {
-    // "what is this" is all stop words → extractKeywords returns [] →
-    // fetchCode returns { text: "", sources: [] } → overview fallback runs.
+  test("does NOT call search.code when question has no extractable keywords", async () => {
+    // "what is this" → all stop words → extractKeywords returns [] → no API call
     mockOctokit.repos.get.mockResolvedValue({
       data: { full_name: "testowner/testrepo", description: "test repo", default_branch: "main", open_issues_count: 0, html_url: "https://github.com/t/r" },
     });
@@ -186,9 +212,9 @@ describe("fetchGitHubContext — code search", () => {
 
     const ctx = await github.fetchGitHubContext("what is this");
 
+    expect(mockOctokit.search.code).not.toHaveBeenCalled();
     expect(mockOctokit.repos.get).toHaveBeenCalledTimes(1);
     expect(ctx.text).toContain("testowner/testrepo");
-    expect(mockOctokit.search.code).not.toHaveBeenCalled();
   });
 });
 
@@ -202,5 +228,24 @@ describe("fetchGitHubContext — error handling", () => {
 
     expect(ctx.text).toContain("GitHub fetch failed");
     expect(ctx.sources).toHaveLength(0);
+  });
+});
+
+describe("module load validation", () => {
+  test("throws at load time if GITHUB_TOKEN is missing", () => {
+    jest.resetModules();
+    jest.mock("../config/github", () => ({
+      repo: "testowner/testrepo",
+      maxCodeFiles: 2, maxFileChars: 500, maxPRs: 5, maxIssues: 5, maxCommits: 5,
+    }));
+    jest.mock("../config/stopwords", () => jest.requireActual("../config/stopwords"));
+    jest.mock("@octokit/rest", () => ({ Octokit: jest.fn(() => mockOctokit) }));
+
+    const savedToken = process.env.GITHUB_TOKEN;
+    delete process.env.GITHUB_TOKEN;
+
+    expect(() => require("../src/github")).toThrow("Missing GITHUB_TOKEN");
+
+    process.env.GITHUB_TOKEN = savedToken;
   });
 });

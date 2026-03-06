@@ -26,7 +26,7 @@ Slack slash command (/ask, /task, /jira)
         │
         ├──► src/github.js
         │    Searches repo for relevant files based on keywords
-        │    Fetches: code files, open PRs, issues, recent commits
+        │    Fetches: code files, markdown docs, open PRs, issues, recent commits
         │
         ├──► src/ai.js
         │    Sends question + code context to AI (provider set in config/ai.js)
@@ -158,12 +158,15 @@ Edit `config/prompts.js` and restart the bot — no other files need changing.
 When you run a slash command, `src/github.js` extracts keywords from your message and searches the GitHub repo. It fetches:
 
 - **Code files** — actual source code matching your keywords (up to 4 files, 2000 chars each)
+- **Markdown docs** — `README.md`, `CONTRIBUTING.md`, and any other paths in `config/github.js → docPaths` (all three commands: `/ask`, `/task`, `/jira`)
 - **Open PRs** — if question is about PRs, progress, or status
 - **Open issues** — if question mentions bugs, tasks, or issues
 - **Recent commits** — if question is about recent changes
 - **Repo overview + README** — as fallback if nothing else matches
 
-When a question matches multiple data types (e.g. "project status"), PRs, issues, and commits are fetched **in parallel** to minimize latency.
+All fetchers (code, docs, PRs, issues, commits) run **in parallel** to minimize latency. Docs are fetched for every command; missing files (404) are silently skipped.
+
+**Adding or removing doc files:** Edit `docPaths` in `config/github.js` — no other changes needed. Set `maxDocChars` to control how much of each file is included.
 
 **Keyword tuning:** Common words like "what", "how", "the", etc. are filtered out before building the code search query. The full list is in `config/stopwords.js` — add or remove entries there to adjust which words are ignored.
 

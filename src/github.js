@@ -1,28 +1,29 @@
 // ============================================================
 // GitHub Integration Module
-// Fetches relevant context from your repo to answer questions
+// Settings: config/github.js
+// Secret token: GITHUB_TOKEN in .env
 // ============================================================
 
+require("dotenv").config();
 const { Octokit } = require("@octokit/rest");
+const githubConfig = require("../config/github");
 
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 
-// Parse "owner/repo" from env
+// Parse owner/repo from config
 function getRepo() {
-  const [owner, repo] = (process.env.GITHUB_REPO || "").split("/");
-  if (!owner || !repo) throw new Error("GITHUB_REPO must be in format owner/repo");
+  const [owner, repo] = (githubConfig.repo || "").split("/");
+  if (!owner || !repo) throw new Error("config/github.js: repo must be in format owner/repo");
   return { owner, repo };
 }
 
 // ── Main entry point ─────────────────────────────────────────
-// Decides what GitHub data to fetch based on the question
 async function fetchGitHubContext(question) {
   const q = question.toLowerCase();
   const context = { text: "", sources: [] };
   const parts = [];
 
   try {
-    // Always include recent PR & issue summary for project awareness
     if (q.includes("pr") || q.includes("pull request") || q.includes("merge") || q.includes("progress") || q.includes("status")) {
       const prs = await getOpenPRs();
       parts.push(prs.text);
@@ -35,31 +36,35 @@ async function fetchGitHubContext(question) {
       context.sources.push(...issues.sources);
     }
 
-    // Code questions → search for relevant files
     if (q.includes("file") || q.includes("function") || q.includes("class") || q.includes("module") || q.includes("how does") || q.includes("what does") || q.includes("explain") || q.includes("code")) {
       const search = await searchCode(question);
       parts.push(search.text);
       context.sources.push(...search.sources);
     }
 
-    // Commits / recent activity
     if (q.includes("commit") || q.includes("recent") || q.includes("latest") || q.includes("last change") || q.includes("who changed")) {
       const commits = await getRecentCommits();
       parts.push(commits.text);
       context.sources.push(...commits.sources);
     }
 
-    // Repo structure overview (default fallback if nothing else matched)
+    // Fallback: always search code if nothing else matched
     if (parts.length === 0) {
-      const overview = await getRepoOverview();
-      parts.push(overview.text);
-      context.sources.push(...overview.sources);
+      const search = await searchCode(question);
+      if (search.text) {
+        parts.push(search.text);
+        context.sources.push(...search.sources);
+      } else {
+        const overview = await getRepoOverview();
+        parts.push(overview.text);
+        context.sources.push(...overview.sources);
+      }
     }
 
     context.text = parts.join("\n\n---\n\n");
   } catch (err) {
     console.error("[github] Error fetching context:", err.message);
-    context.text = `(Could not fetch full GitHub context: ${err.message})`;
+    context.text = `(Could not fetch GitHub context: ${err.message})`;
   }
 
   return context;
@@ -68,12 +73,9 @@ async function fetchGitHubContext(question) {
 // ── Open Pull Requests ───────────────────────────────────────
 async function getOpenPRs() {
   const { owner, repo } = getRepo();
-  const { data } = await octokit.pulls.list({ owner, repo, state: "open", per_page: 10 });
+  const { data } = await octokit.pulls.list({ owner, repo, state: "open", per_page: githubConfig.maxPRs });
 
-  const sources = data.map((pr) => ({
-    label: `PR #${pr.number}: ${pr.title}`,
-    url: pr.html_url,
-  }));
+  const sources = data.map((pr) => ({ label: `PR #${pr.number}: ${pr.title}`, url: pr.html_url }));
 
   const text = data.length === 0
     ? "No open pull requests."
@@ -88,15 +90,10 @@ async function getOpenPRs() {
 // ── Open Issues ──────────────────────────────────────────────
 async function getOpenIssues() {
   const { owner, repo } = getRepo();
-  const { data } = await octokit.issues.listForRepo({ owner, repo, state: "open", per_page: 15 });
-
-  // Filter out PRs (GitHub returns PRs as issues too)
+  const { data } = await octokit.issues.listForRepo({ owner, repo, state: "open", per_page: githubConfig.maxIssues });
   const issues = data.filter((i) => !i.pull_request);
 
-  const sources = issues.map((i) => ({
-    label: `Issue #${i.number}: ${i.title}`,
-    url: i.html_url,
-  }));
+  const sources = issues.map((i) => ({ label: `Issue #${i.number}: ${i.title}`, url: i.html_url }));
 
   const text = issues.length === 0
     ? "No open issues."
@@ -112,7 +109,6 @@ async function getOpenIssues() {
 async function searchCode(question) {
   const { owner, repo } = getRepo();
 
-  // Extract meaningful keywords from question
   const stopWords = new Set(["what", "does", "how", "the", "is", "are", "can", "explain", "tell", "me", "about", "a", "an", "in", "for", "of", "and", "to", "this"]);
   const keywords = question
     .toLowerCase()
@@ -121,28 +117,22 @@ async function searchCode(question) {
     .filter((w) => w.length > 2 && !stopWords.has(w))
     .slice(0, 3);
 
-  if (keywords.length === 0) {
-    return { text: "", sources: [] };
-  }
+  if (keywords.length === 0) return { text: "", sources: [] };
 
   const searchQuery = `${keywords.join(" ")} repo:${owner}/${repo}`;
   console.log(`[github] Code search: "${searchQuery}"`);
 
   try {
-    const { data } = await octokit.search.code({ q: searchQuery, per_page: 5 });
+    const { data } = await octokit.search.code({ q: searchQuery, per_page: githubConfig.maxCodeFiles + 1 });
 
-    const sources = data.items.map((item) => ({
-      label: item.path,
-      url: item.html_url,
-    }));
+    const sources = data.items.map((item) => ({ label: item.path, url: item.html_url }));
 
-    // Fetch file contents for top results
     const fileContents = await Promise.allSettled(
-      data.items.slice(0, 3).map(async (item) => {
+      data.items.slice(0, githubConfig.maxCodeFiles).map(async (item) => {
         try {
           const { data: fileData } = await octokit.repos.getContent({ owner, repo, path: item.path });
           const content = Buffer.from(fileData.content, "base64").toString("utf-8");
-          return `### File: ${item.path}\n\`\`\`\n${content.slice(0, 1500)}\n\`\`\``;
+          return `### File: ${item.path}\n\`\`\`\n${content.slice(0, githubConfig.maxFileChars)}\n\`\`\``;
         } catch {
           return `### File: ${item.path}\n(Could not fetch content)`;
         }
@@ -167,12 +157,9 @@ async function searchCode(question) {
 // ── Recent Commits ───────────────────────────────────────────
 async function getRecentCommits() {
   const { owner, repo } = getRepo();
-  const { data } = await octokit.repos.listCommits({ owner, repo, per_page: 10 });
+  const { data } = await octokit.repos.listCommits({ owner, repo, per_page: githubConfig.maxCommits });
 
-  const sources = data.map((c) => ({
-    label: c.commit.message.split("\n")[0].slice(0, 60),
-    url: c.html_url,
-  }));
+  const sources = data.map((c) => ({ label: c.commit.message.split("\n")[0].slice(0, 60), url: c.html_url }));
 
   const text = `## Recent Commits\n` +
     data.map((c) =>
@@ -196,7 +183,6 @@ async function getRepoOverview() {
     ? contents.data.map((f) => `${f.type === "dir" ? "📁" : "📄"} ${f.name}`).join("\n")
     : "";
 
-  // Try to fetch README
   let readme = "";
   try {
     const { data: readmeData } = await octokit.repos.getReadme({ owner, repo });
@@ -212,9 +198,7 @@ async function getRepoOverview() {
     `### Root Files/Folders:\n${files}\n\n` +
     `### README (first 1000 chars):\n${readme}`;
 
-  const sources = [{ label: `${r.full_name} on GitHub`, url: r.html_url }];
-
-  return { text, sources };
+  return { text, sources: [{ label: `${r.full_name} on GitHub`, url: r.html_url }] };
 }
 
 module.exports = { fetchGitHubContext };

@@ -1,14 +1,23 @@
+// ============================================================
+// Jira Integration Module
+// Settings: config/jira.js
+// Secret token: JIRA_TOKEN in .env
+// ============================================================
+
 require("dotenv").config();
+const jiraConfig = require("../config/jira");
 
-const JIRA_HOST = process.env.JIRA_HOST;
-const JIRA_EMAIL = process.env.JIRA_EMAIL;
-const JIRA_TOKEN = process.env.JIRA_TOKEN;
-const JIRA_PROJECT = process.env.JIRA_PROJECT || "INTEL";
+function getAuthHeader() {
+  const token = process.env.JIRA_TOKEN;
+  if (!token) throw new Error("Missing JIRA_TOKEN in .env");
+  return "Basic " + Buffer.from(`${jiraConfig.email}:${token}`).toString("base64");
+}
 
-const authHeader = "Basic " + Buffer.from(`${JIRA_EMAIL}:${JIRA_TOKEN}`).toString("base64");
+async function createJiraTicket({ summary, description, issueType }) {
+  const authHeader = getAuthHeader();
+  const type = issueType || jiraConfig.defaultIssueType;
 
-async function createJiraTicket({ summary, description, issueType = "Task" }) {
-  const response = await fetch(`${JIRA_HOST}/rest/api/3/issue`, {
+  const response = await fetch(`${jiraConfig.host}/rest/api/3/issue`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -16,7 +25,7 @@ async function createJiraTicket({ summary, description, issueType = "Task" }) {
     },
     body: JSON.stringify({
       fields: {
-        project: { key: JIRA_PROJECT },
+        project: { key: jiraConfig.project },
         summary,
         description: {
           type: "doc",
@@ -28,7 +37,7 @@ async function createJiraTicket({ summary, description, issueType = "Task" }) {
             },
           ],
         },
-        issuetype: { name: issueType },
+        issuetype: { name: type },
       },
     }),
   });
@@ -41,7 +50,7 @@ async function createJiraTicket({ summary, description, issueType = "Task" }) {
   const data = await response.json();
   return {
     key: data.key,
-    url: `${JIRA_HOST}/browse/${data.key}`,
+    url: `${jiraConfig.host}/browse/${data.key}`,
   };
 }
 

@@ -65,31 +65,31 @@ PM2 → keeps bot running 24/7, auto-restarts on crash
 
 ## Environment Variables
 
+`.env` holds **secrets only**. Non-secret settings (host, project, repo, model) live in `config/`.
+
 File location: `/opt/slack-git-ai-bot/.env`
 
 ```env
-# Slack
+# Slack — from api.slack.com/apps
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_SIGNING_SECRET=...
 
-# GitHub
+# GitHub — token only; repo is set in config/github.js
 GITHUB_TOKEN=ghp_...
-GITHUB_REPO=owner/repo-name
 
-# AI — add the key for whichever provider you set in config/ai.js
-GROQ_API_KEY=gsk_...          # if ACTIVE_PROVIDER = "groq"
-# OPENAI_API_KEY=sk-...       # if ACTIVE_PROVIDER = "openai"
-# ANTHROPIC_API_KEY=sk-ant-.. # if ACTIVE_PROVIDER = "anthropic"
+# AI — key for whichever provider is set in config/ai.js
+GROQ_API_KEY=gsk_...
+# OPENAI_API_KEY=sk-...
+# ANTHROPIC_API_KEY=sk-ant-...
 
-# Jira
-JIRA_HOST=https://yourorg.atlassian.net
-JIRA_EMAIL=you@yourorg.com
+# Jira — token only; host/project/email are set in config/jira.js
 JIRA_TOKEN=...
-JIRA_PROJECT=YOUR_PROJECT_KEY
 
 # Server
 PORT=3000
 ```
+
+**To change Jira project or GitHub repo** — edit `config/jira.js` or `config/github.js`, not `.env`.
 
 ---
 
@@ -103,13 +103,18 @@ slack-git-ai-bot/
 │   ├── github.js     # GitHub API — searches and fetches relevant code files
 │   └── jira.js       # Jira API — creates tickets via Atlassian REST API
 ├── config/
-│   ├── ai.js         # ← Switch AI provider here (groq / openai / anthropic)
+│   ├── ai.js         # ← Switch AI provider + model here
+│   ├── github.js     # ← Set repo name and fetch limits here
+│   ├── jira.js       # ← Set Jira host, project key, email here
 │   └── prompts.js    # ← Edit all AI prompts here
-├── ecosystem.config.js  # PM2 process config
+├── .env              # SECRET tokens only — never commit this file
+├── .env.example      # Template — copy to .env and fill in tokens
+├── ecosystem.config.js
 ├── package.json
-├── .env.example      # Copy to .env and fill in your tokens
 └── README.md
 ```
+
+**Rule of thumb:** `config/` = settings you'll want to change. `.env` = secrets only.
 
 ---
 

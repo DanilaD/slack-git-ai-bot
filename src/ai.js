@@ -1,57 +1,40 @@
-// ============================================================
-// AI Integration Module
-// Reads provider + prompts from config/ and calls the right API
-// To switch AI provider: edit config/ai.js → ACTIVE_PROVIDER
-// To change prompts: edit config/prompts.js
-// ============================================================
+"use strict";
 
 require("dotenv").config();
-const aiConfig = require("../config/ai");
+const { name, model, apiUrl, apiKeyEnv, maxTokens, ACTIVE_PROVIDER } = require("../config/ai");
 const { ASK, TASK, JIRA } = require("../config/prompts");
 
-// ── Core API caller (OpenAI-compatible format) ────────────────
-// Groq and OpenAI both use the same /v1/chat/completions format.
-// Anthropic uses a different format — handled separately below.
-async function callAI(systemPrompt, userMessage) {
-  const apiKey = process.env[aiConfig.apiKeyEnv];
-  if (!apiKey) {
-    throw new Error(`Missing env var: ${aiConfig.apiKeyEnv}. Add it to your .env file.`);
-  }
+console.log(`[ai] Provider: ${name} | Model: ${model}`);
 
-  // Anthropic uses a different API format
-  if (aiConfig.ACTIVE_PROVIDER === "anthropic") {
-    return callAnthropic(systemPrompt, userMessage, apiKey);
-  }
+// ── Template renderer ─────────────────────────────────────────
 
-  // Groq + OpenAI use the same OpenAI-compatible format
-  const response = await fetch(aiConfig.apiUrl, {
+const render = (template, vars) =>
+  Object.entries(vars).reduce(
+    (s, [k, v]) => s.replaceAll(`{${k}}`, v ?? ""),
+    template
+  );
+
+// ── HTTP callers ──────────────────────────────────────────────
+
+const callOpenAICompat = async (systemPrompt, userMessage, apiKey) => {
+  const res = await fetch(apiUrl, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
-    },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: aiConfig.model,
-      max_tokens: aiConfig.maxTokens,
+      model,
+      max_tokens: maxTokens,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userMessage },
       ],
     }),
   });
+  if (!res.ok) throw new Error(`${name} API error: ${await res.text()}`);
+  return (await res.json()).choices[0].message.content;
+};
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`${aiConfig.name} API error: ${err}`);
-  }
-
-  const data = await response.json();
-  return data.choices[0].message.content;
-}
-
-// ── Anthropic-specific caller ────────────────────────────────
-async function callAnthropic(systemPrompt, userMessage, apiKey) {
-  const response = await fetch(aiConfig.apiUrl, {
+const callAnthropic = async (systemPrompt, userMessage, apiKey) => {
+  const res = await fetch(apiUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -59,58 +42,38 @@ async function callAnthropic(systemPrompt, userMessage, apiKey) {
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: aiConfig.model,
-      max_tokens: aiConfig.maxTokens,
+      model,
+      max_tokens: maxTokens,
       system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],
     }),
   });
+  if (!res.ok) throw new Error(`Anthropic API error: ${await res.text()}`);
+  return (await res.json()).content[0].text;
+};
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Anthropic API error: ${err}`);
-  }
+// ── Core dispatch ─────────────────────────────────────────────
 
-  const data = await response.json();
-  return data.content[0].text;
-}
+const callAI = (systemPrompt, userMessage) => {
+  const apiKey = process.env[apiKeyEnv];
+  if (!apiKey) throw new Error(`Missing env var: ${apiKeyEnv}`);
+  return ACTIVE_PROVIDER === "anthropic"
+    ? callAnthropic(systemPrompt, userMessage, apiKey)
+    : callOpenAICompat(systemPrompt, userMessage, apiKey);
+};
 
-// ── Fill in template placeholders ────────────────────────────
-function fillTemplate(template, vars) {
-  return Object.entries(vars).reduce(
-    (str, [key, val]) => str.replace(new RegExp(`\\{${key}\\}`, "g"), val || ""),
-    template
-  );
-}
+// ── Public API ────────────────────────────────────────────────
+// Each function renders its prompt template then calls the AI.
 
-// ── /ask — Answer a question about the codebase ──────────────
-async function askQuestion(question, githubContext) {
-  console.log(`[ai] Provider: ${aiConfig.name} | Model: ${aiConfig.model}`);
-  const userMessage = fillTemplate(ASK.user, {
-    question,
-    context: githubContext.text || "No context available.",
-  });
-  return callAI(ASK.system, userMessage);
-}
+const run = ({ system, user }, vars) => callAI(system, render(user, vars));
 
-// ── /task — Produce an implementation plan ───────────────────
-async function analyzeTask(question, githubContext) {
-  console.log(`[ai] Provider: ${aiConfig.name} | Model: ${aiConfig.model}`);
-  const userMessage = fillTemplate(TASK.user, {
-    question,
-    context: githubContext.text || "No context available.",
-  });
-  return callAI(TASK.system, userMessage);
-}
+const contextVars = (question, ctx) => ({
+  question,
+  context: ctx.text || "No context available.",
+});
 
-// ── /jira — Generate structured Jira ticket content ──────────
-async function generateJiraContent(question, githubContext) {
-  console.log(`[ai] Provider: ${aiConfig.name} | Model: ${aiConfig.model}`);
-  const userMessage = fillTemplate(JIRA.user, {
-    question,
-    context: githubContext.text || "No context available.",
-  });
-  return callAI(JIRA.system, userMessage);
-}
+const askQuestion       = (q, ctx) => run(ASK,  contextVars(q, ctx));
+const analyzeTask       = (q, ctx) => run(TASK, contextVars(q, ctx));
+const generateJiraContent = (q, ctx) => run(JIRA, contextVars(q, ctx));
 
 module.exports = { askQuestion, analyzeTask, generateJiraContent };

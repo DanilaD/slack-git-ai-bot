@@ -1,14 +1,13 @@
 {
-  "name": "slack-claude-bot",
-  "version": "1.0.0",
-  "description": "Slack bot that answers project questions using Claude AI + GitHub",
-  "main": "index.js",
+  "name": "slack-git-ai-bot",
+  "version": "2.0.0",
+  "description": "Slack bot that answers project questions using AI + GitHub",
+  "main": "src/index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
     "@octokit/rest": "^20.0.0",
     "@slack/web-api": "^7.0.0",
     "dotenv": "^16.0.0",

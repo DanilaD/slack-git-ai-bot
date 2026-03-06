@@ -62,7 +62,7 @@ SLACK_SIGNING_SECRET=your-signing-secret-here
 
 # GitHub
 GITHUB_TOKEN=ghp_your-github-token-here
-GITHUB_REPO=techaxy/rv-tracker
+GITHUB_REPO=owner/repo-name
 
 # Anthropic
 ANTHROPIC_API_KEY=sk-ant-your-api-key-here
@@ -117,13 +117,13 @@ echo ""
 echo "============================================================"
 echo "✅ Deployment complete!"
 echo ""
-echo "Your bot is running at: http://185.5.54.69/slack/ask"
+echo "Your bot is running at: http://YOUR_SERVER_IP/slack/ask"
 echo ""
 echo "Next steps:"
 echo "  1. Edit /opt/slack-claude-bot/.env with your tokens"
 echo "  2. Run: pm2 restart slack-claude-bot"
 echo "  3. In Slack app settings, set slash command URL to:"
-echo "     http://185.5.54.69/slack/ask"
+echo "     http://YOUR_SERVER_IP/slack/ask"
 echo ""
 echo "Useful commands:"
 echo "  pm2 status              — check if bot is running"

@@ -20,7 +20,7 @@ BOT_PORT=3000
 BOT_DIR="/opt/slack-claude-bot"
 NGINX_CONF="/etc/nginx/sites-available/slack-claude-bot"
 NGINX_ENABLED="/etc/nginx/sites-enabled/slack-claude-bot"
-SERVER_URL="http://185.5.54.69/slack/ask"
+SERVER_URL="http://YOUR_SERVER_IP/slack/ask"
 
 # ============================================================
 # Helper Functions

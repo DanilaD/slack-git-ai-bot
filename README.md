@@ -44,12 +44,12 @@ PM2 → keeps bot running 24/7, auto-restarts on crash
 
 ## Server
 
-- **Host:** `185.5.54.69`
+- **Host:** `YOUR_SERVER_IP`
 - **OS:** Ubuntu/Debian Linux
 - **Node.js:** v20 LTS
 - **Process manager:** PM2 (fork mode)
 - **Reverse proxy:** nginx → `localhost:3000`
-- **App directory:** `/opt/slack-claude-bot/`
+- **App directory:** `/opt/slack-git-ai-bot/`
 
 ---
 
@@ -57,15 +57,15 @@ PM2 → keeps bot running 24/7, auto-restarts on crash
 
 | Command | URL |
 |---------|-----|
-| `/ask` | `http://185.5.54.69/slack/ask` |
-| `/task` | `http://185.5.54.69/slack/task` |
-| `/jira` | `http://185.5.54.69/slack/jira` |
+| `/ask` | `http://YOUR_SERVER_IP/slack/ask` |
+| `/task` | `http://YOUR_SERVER_IP/slack/task` |
+| `/jira` | `http://YOUR_SERVER_IP/slack/jira` |
 
 ---
 
 ## Environment Variables
 
-File location: `/opt/slack-claude-bot/.env`
+File location: `/opt/slack-git-ai-bot/.env`
 
 ```env
 # Slack
@@ -74,16 +74,18 @@ SLACK_SIGNING_SECRET=...
 
 # GitHub
 GITHUB_TOKEN=ghp_...
-GITHUB_REPO=techaxy/rv-tracker
+GITHUB_REPO=owner/repo-name
 
-# Groq AI
-GROQ_API_KEY=gsk_...
+# AI — add the key for whichever provider you set in config/ai.js
+GROQ_API_KEY=gsk_...          # if ACTIVE_PROVIDER = "groq"
+# OPENAI_API_KEY=sk-...       # if ACTIVE_PROVIDER = "openai"
+# ANTHROPIC_API_KEY=sk-ant-.. # if ACTIVE_PROVIDER = "anthropic"
 
 # Jira
-JIRA_HOST=https://techaxy.atlassian.net
-JIRA_EMAIL=dan@techaxy.com
+JIRA_HOST=https://yourorg.atlassian.net
+JIRA_EMAIL=you@yourorg.com
 JIRA_TOKEN=...
-JIRA_PROJECT=INTEL
+JIRA_PROJECT=YOUR_PROJECT_KEY
 
 # Server
 PORT=3000
@@ -91,31 +93,57 @@ PORT=3000
 
 ---
 
-## Files
+## Project Structure
 
 ```
-/opt/slack-claude-bot/
-├── index.js          # Express server — handles /ask, /task, /jira commands
-├── github.js         # GitHub API — searches and fetches relevant code files
-├── claude.js         # Groq AI — generates answers and Jira ticket content
-├── jira.js           # Jira API — creates tickets in the INTEL project
-├── package.json      # Dependencies
-└── .env              # Environment variables (tokens & config)
+slack-git-ai-bot/
+├── src/
+│   ├── index.js      # Express server — handles /ask, /task, /jira endpoints
+│   ├── ai.js         # AI caller — reads config/ai.js to pick the right provider
+│   ├── github.js     # GitHub API — searches and fetches relevant code files
+│   └── jira.js       # Jira API — creates tickets via Atlassian REST API
+├── config/
+│   ├── ai.js         # ← Switch AI provider here (groq / openai / anthropic)
+│   └── prompts.js    # ← Edit all AI prompts here
+├── ecosystem.config.js  # PM2 process config
+├── package.json
+├── .env.example      # Copy to .env and fill in your tokens
+└── README.md
 ```
 
 ---
 
-## AI Model
+## Switching AI Provider
 
-**Model:** `moonshotai/kimi-k2-instruct` via Groq API (free tier)
-**Context window:** 131k tokens
-**Strengths:** Code analysis, structured output, fast responses
+Open `config/ai.js` and change the `ACTIVE_PROVIDER` line at the top:
 
-The bot uses **3 different prompts:**
+```js
+const ACTIVE_PROVIDER = "groq"; // change to "openai" or "anthropic"
+```
 
-- **ASK prompt** — answers questions based on real code, plain human language
-- **TASK prompt** — produces structured analysis: what exists, implementation plan, risks, estimate
-- **JIRA prompt** — structured ticket with: original request, goal, explanation, code analysis, clarifying questions, implementation plan, risks, estimate
+Then add the matching API key to your `.env` file and restart the bot.
+
+| Provider | Env var | Cost | Notes |
+|----------|---------|------|-------|
+| `groq` | `GROQ_API_KEY` | Free tier | Default. Fast, 131k context. [console.groq.com](https://console.groq.com) |
+| `openai` | `OPENAI_API_KEY` | Paid | GPT-4o-mini by default. Change model in `config/ai.js` |
+| `anthropic` | `ANTHROPIC_API_KEY` | Paid | Claude Haiku by default. Requires [console.anthropic.com](https://console.anthropic.com) credits |
+
+You can also change the specific model inside `config/ai.js` without switching providers — each provider section has a `model` field and a comment listing other available models.
+
+---
+
+## Editing Prompts
+
+All prompts live in `config/prompts.js`. There are three:
+
+- **ASK** — used by `/ask` to answer questions about the codebase
+- **TASK** — used by `/task` to produce a structured implementation plan
+- **JIRA** — used by `/jira` to generate the Jira ticket content
+
+Each prompt has a `system` section (the AI's role and rules) and a `user` template (the actual message sent). The templates use `{question}` and `{context}` placeholders that are filled in at runtime.
+
+Edit `config/prompts.js` and restart the bot — no other files need changing.
 
 ---
 
@@ -135,7 +163,7 @@ The fetched code is sent to the AI along with your question so it answers based 
 
 ## Jira Integration
 
-**Project:** `INTELLIGENCE (INTEL)` on `techaxy.atlassian.net`
+**Project:** set via `JIRA_PROJECT` in `.env` (e.g. `INTEL`)
 
 When `/jira` is used, the bot:
 1. Searches GitHub for relevant code
@@ -234,10 +262,10 @@ apt-get install -y git
 
 ```bash
 # Clone the repo
-git clone https://github.com/DanilaD/slack-git-ai-bot.git /opt/slack-claude-bot
+git clone https://github.com/DanilaD/slack-git-ai-bot.git /opt/slack-git-ai-bot
 
 # Install dependencies
-cd /opt/slack-claude-bot
+cd /opt/slack-git-ai-bot
 npm install --production
 
 # Create your .env file
@@ -277,8 +305,8 @@ nginx -t && systemctl reload nginx
 ### Step 5 — Start the bot
 
 ```bash
-cd /opt/slack-claude-bot
-pm2 start index.js --name slack-claude-bot
+cd /opt/slack-git-ai-bot
+pm2 start src/index.js --name slack-git-ai-bot
 pm2 save
 pm2 startup   # run the printed command to auto-start on reboot
 ```
@@ -304,23 +332,23 @@ When new code is pushed to GitHub, update the server like this:
 
 ```bash
 # Pull latest code
-cd /opt/slack-claude-bot
+cd /opt/slack-git-ai-bot
 git pull origin main
 
 # Install any new dependencies
 npm install --production
 
 # Restart bot to load new code
-pm2 restart slack-claude-bot --update-env
+pm2 restart slack-git-ai-bot --update-env
 
 # Confirm it restarted cleanly
 pm2 status
-pm2 logs slack-claude-bot --lines 20
+pm2 logs slack-git-ai-bot --lines 20
 ```
 
 **Update a single token or config value:**
 ```bash
-nano /opt/slack-claude-bot/.env
+nano /opt/slack-git-ai-bot/.env
 # Edit the value, save (Ctrl+X → Y → Enter)
 pm2 restart slack-claude-bot --update-env
 ```
@@ -330,7 +358,7 @@ pm2 restart slack-claude-bot --update-env
 pm2 kill
 fuser -k 3000/tcp 2>/dev/null
 sleep 2
-cd /opt/slack-claude-bot
+cd /opt/slack-git-ai-bot
 pm2 start index.js --name slack-claude-bot
 pm2 save
 ```
@@ -344,23 +372,31 @@ pm2 save
 pm2 status
 
 # View live logs
-pm2 logs slack-claude-bot
+pm2 logs slack-git-ai-bot
 
-# Restart bot
-pm2 restart slack-claude-bot --update-env
+# Restart bot (after code or .env changes)
+pm2 restart slack-git-ai-bot --update-env
 
 # Stop bot
-pm2 stop slack-claude-bot
+pm2 stop slack-git-ai-bot
 
 # Start bot (if stopped)
-cd /opt/slack-claude-bot && pm2 start index.js --name slack-claude-bot
+cd /opt/slack-git-ai-bot && pm2 start src/index.js --name slack-git-ai-bot
 
-# Full clean restart
+# Full clean restart (if port is stuck)
 pm2 kill && fuser -k 3000/tcp 2>/dev/null && sleep 2
-cd /opt/slack-claude-bot && pm2 start index.js --name slack-claude-bot && pm2 save
+cd /opt/slack-git-ai-bot && pm2 start src/index.js --name slack-git-ai-bot && pm2 save
 
 # Edit tokens
-nano /opt/slack-claude-bot/.env
+nano /opt/slack-git-ai-bot/.env
+
+# Switch AI provider
+nano /opt/slack-git-ai-bot/config/ai.js
+# Change ACTIVE_PROVIDER, then: pm2 restart slack-git-ai-bot --update-env
+
+# Edit prompts
+nano /opt/slack-git-ai-bot/config/prompts.js
+# Then: pm2 restart slack-git-ai-bot --update-env
 
 # Check nginx
 systemctl status nginx
@@ -373,7 +409,7 @@ nginx -t && systemctl reload nginx
 
 | Problem | Likely cause | Fix |
 |---------|-------------|-----|
-| `dispatch_failed` | Bot not running | `pm2 start index.js --name slack-claude-bot` |
+| `dispatch_failed` | Bot not running | `pm2 start src/index.js --name slack-git-ai-bot` |
 | `operation_timeout` | AI taking too long | Switch to faster model in `claude.js` |
 | `EADDRINUSE :3000` | Old process still running | `fuser -k 3000/tcp && pm2 restart slack-claude-bot` |
 | GitHub returns wrong files | Keywords not matching | Ask more specific questions |
@@ -384,14 +420,14 @@ nginx -t && systemctl reload nginx
 
 ## Slack App Settings
 
-Registered at [api.slack.com/apps](https://api.slack.com/apps) — **Project Assistant** app in the `techaxy` workspace.
+Registered at [api.slack.com/apps](https://api.slack.com/apps) — create a **Slack App** in your workspace and add the slash commands.
 
 **Bot Token Scopes:** `commands`, `chat:write`, `chat:write.public`
 
 **Slash Commands:**
-- `/ask` → `http://185.5.54.69/slack/ask`
-- `/task` → `http://185.5.54.69/slack/task`
-- `/jira` → `http://185.5.54.69/slack/jira`
+- `/ask` → `http://YOUR_SERVER_IP/slack/ask`
+- `/task` → `http://YOUR_SERVER_IP/slack/task`
+- `/jira` → `http://YOUR_SERVER_IP/slack/jira`
 
 ---
 

@@ -4,8 +4,8 @@
 module.exports = {
   apps: [
     {
-      name: "slack-claude-bot",
-      script: "index.js",
+      name: "slack-git-ai-bot",
+      script: "src/index.js",
       cwd: "/opt/slack-claude-bot",
       instances: 1,
       autorestart: true,

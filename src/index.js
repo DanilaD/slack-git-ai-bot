@@ -133,7 +133,7 @@ const runCommand =
 
 // ── Slash command factory ─────────────────────────────────────
 
-const slashCommand = ({ _label, emptyHint, ackText, run }) => [
+const slashCommand = ({ emptyHint, ackText, run }) => [
   verifySlackSignature,
   async (req, res) => {
     const { text, user_id, response_url } = req.body;
@@ -152,7 +152,6 @@ const slashCommand = ({ _label, emptyHint, ackText, run }) => [
 app.post(
   "/slack/ask",
   ...slashCommand({
-    label: "ask",
     emptyHint: "Ask a question. Example: `/ask How does registration work?`",
     ackText: (uid, q) => `_<@${uid}> asked:_ *${q}*\n\n⏳ Searching codebase...`,
     run: runCommand("ask", askQuestion, (q, answer, ctx) =>
@@ -166,7 +165,6 @@ app.post(
 app.post(
   "/slack/task",
   ...slashCommand({
-    label: "task",
     emptyHint: "Describe the task. Example: `/task Add email verification to registration`",
     ackText: (uid, q) => `_<@${uid}> requested task analysis:_ *${q}*\n\n⏳ Analyzing codebase...`,
     run: runCommand("task", analyzeTask, (q, plan, ctx) =>
@@ -206,7 +204,6 @@ const runJira = async ({ text, user_id, response_url }) => {
 app.post(
   "/slack/jira",
   ...slashCommand({
-    label: "jira",
     emptyHint: "Describe what to build. Example: `/jira Add email verification to registration`",
     ackText: (uid, q) => `_<@${uid}> creating Jira ticket:_ *${q}*\n\n⏳ Analyzing codebase...`,
     run: runJira,

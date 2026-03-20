@@ -97,17 +97,22 @@ PORT=3000
 
 ```
 slack-git-ai-bot/
+├── config/
+│   ├── ai.js         # ← Switch AI provider + model here
+│   ├── github.js     # ← Set repo name and fetch limits here
+│   ├── jira.js       # ← Set Jira host, project key, email here
+│   ├── prompts.js    # Loads from prompts/*.md
+│   └── stopwords.js  # Loads from prompts/stopwords.md
+├── prompts/          # ← Edit AI prompts and stopwords here (root dir)
+│   ├── ask.md
+│   ├── task.md
+│   ├── jira.md
+│   └── stopwords.md
 ├── src/
 │   ├── index.js      # Express server — handles /ask, /task, /jira endpoints
 │   ├── ai.js         # AI caller — reads config/ai.js to pick the right provider
 │   ├── github.js     # GitHub API — searches and fetches relevant code files
 │   └── jira.js       # Jira API — creates tickets via Atlassian REST API
-├── config/
-│   ├── ai.js         # ← Switch AI provider + model here
-│   ├── github.js     # ← Set repo name and fetch limits here
-│   ├── jira.js       # ← Set Jira host, project key, email here
-│   ├── prompts.js    # ← Edit all AI prompts here
-│   └── stopwords.js  # ← Add/remove words excluded from code search keywords
 ├── .env              # SECRET tokens only — never commit this file
 ├── .env.example      # Template — copy to .env and fill in tokens
 ├── ecosystem.config.js
@@ -141,15 +146,13 @@ You can also change the specific model inside `config/ai.js` without switching p
 
 ## Editing Prompts
 
-All prompts live in `config/prompts.js`. There are three:
+Prompts live in `prompts/` (project root) as `ask.md`, `task.md`, and `jira.md`. Each file has `## system` and `## user` sections. The templates use `{question}` and `{context}` placeholders filled in at runtime.
 
 - **ASK** — used by `/ask` to answer questions about the codebase
 - **TASK** — used by `/task` to produce a structured implementation plan
 - **JIRA** — used by `/jira` to generate the Jira ticket content
 
-Each prompt has a `system` section (the AI's role and rules) and a `user` template (the actual message sent). The templates use `{question}` and `{context}` placeholders that are filled in at runtime.
-
-Edit `config/prompts.js` and restart the bot — no other files need changing.
+Edit the `.md` files in `prompts/` and restart the bot — no code changes needed.
 
 ---
 
@@ -162,10 +165,13 @@ When you run a slash command, `src/github.js` extracts keywords from your messag
 - **Open issues** — if question mentions bugs, tasks, or issues
 - **Recent commits** — if question is about recent changes
 - **Repo overview + README** — as fallback if nothing else matches
+- **Codebase overview** — if `CODEBASE.md` exists in the repo root, includes it for richer AI answers (path configurable in `config/github.js` → `codebaseOverviewPath`)
 
 When a question matches multiple data types (e.g. "project status"), PRs, issues, and commits are fetched **in parallel** to minimize latency.
 
-**Keyword tuning:** Common words like "what", "how", "the", etc. are filtered out before building the code search query. The full list is in `config/stopwords.js` — add or remove entries there to adjust which words are ignored.
+**Better answers with CODEBASE.md:** Add a `CODEBASE.md` file to the root of your target repository describing key files, folders, and architecture. The bot will include it automatically when it exists. To change the path or disable it, set `codebaseOverviewPath` in `config/github.js`.
+
+**Keyword tuning:** Common words like "what", "how", "the", etc. are filtered out before building the code search query. The full list is in `prompts/stopwords.md` — add or remove words (one per line) there.
 
 ---
 
@@ -432,8 +438,8 @@ nano /opt/slack-git-ai-bot/.env
 nano /opt/slack-git-ai-bot/config/ai.js
 # Change ACTIVE_PROVIDER, then: pm2 restart slack-git-ai-bot --update-env
 
-# Edit prompts
-nano /opt/slack-git-ai-bot/config/prompts.js
+# Edit prompts (ask.md, task.md, jira.md) or stopwords
+nano /opt/slack-git-ai-bot/prompts/ask.md
 # Then: pm2 restart slack-git-ai-bot --update-env
 
 # Check nginx
@@ -450,9 +456,9 @@ nginx -t && systemctl reload nginx
 | `dispatch_failed` | Bot not running | `pm2 start src/index.js --name slack-git-ai-bot` |
 | `operation_timeout` | AI taking too long | Switch to faster model in `config/ai.js` |
 | `EADDRINUSE :3000` | Old process still running | `fuser -k 3000/tcp && pm2 restart slack-git-ai-bot` |
-| GitHub returns wrong files | Keywords not matching | Ask more specific questions; tune `config/stopwords.js` |
+| GitHub returns wrong files | Keywords not matching | Ask more specific questions; tune `prompts/stopwords.md` |
 | Jira ticket not created | Token expired or wrong project | Check `.env` JIRA_TOKEN and `config/jira.js` (project, host) |
-| Bot answers from docs not code | AI ignoring context | Already fixed in prompt — ensure `config/prompts.js` is latest |
+| Bot answers from docs not code | AI ignoring context | Ensure `prompts/*.md` files are up to date |
 | `401 Invalid Slack signature` | Wrong or missing `SLACK_SIGNING_SECRET` | Copy signing secret from api.slack.com/apps → Basic Information → Signing Secret into `.env` |
 
 ---

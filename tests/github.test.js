@@ -21,6 +21,7 @@ jest.mock("../config/github", () => ({
   maxCommits: 5,
   docPaths: ["README.md", "CONTRIBUTING.md"],
   maxDocChars: 1000,
+  codebaseOverviewPath: "CODEBASE.md",
 }));
 
 // Use the real stopwords file so keyword filtering is tested accurately
@@ -329,8 +330,10 @@ describe("fetchMarkdownDocs", () => {
     expect(result.sources).toHaveLength(0);
   });
 
-  test("fetchGitHubContext includes docs when includeDocs is true", async () => {
+  test("fetchGitHubContext includes docs and codebase overview when includeDocs is true", async () => {
     const readmeContent = Buffer.from("# README content").toString("base64");
+    const codebaseContent = Buffer.from("# Codebase\nKey files described here.").toString("base64");
+
     mockOctokit.search.code.mockResolvedValue({ data: { items: [] } });
     mockOctokit.repos.get.mockResolvedValue({
       data: {
@@ -341,11 +344,22 @@ describe("fetchMarkdownDocs", () => {
         html_url: "https://github.com/t/r",
       },
     });
-    mockOctokit.repos.getContent
-      .mockResolvedValueOnce({
-        data: { content: readmeContent, html_url: "https://github.com/t/r/blob/main/README.md" },
-      })
-      .mockRejectedValue(new Error("Not Found"));
+
+    // Route getContent calls by path: README → content, CODEBASE.md → content, others → 404
+    mockOctokit.repos.getContent.mockImplementation(({ path }) => {
+      if (path === "README.md")
+        return Promise.resolve({
+          data: { content: readmeContent, html_url: "https://github.com/t/r/blob/main/README.md" },
+        });
+      if (path === "CODEBASE.md")
+        return Promise.resolve({
+          data: {
+            content: codebaseContent,
+            html_url: "https://github.com/t/r/blob/main/CODEBASE.md",
+          },
+        });
+      return Promise.reject(new Error("Not Found"));
+    });
     mockOctokit.repos.getReadme.mockRejectedValue(new Error("no readme"));
 
     const ctx = await github.fetchGitHubContext("how do I set up the project", {
@@ -354,6 +368,9 @@ describe("fetchMarkdownDocs", () => {
 
     expect(ctx.text).toContain("Documentation");
     expect(ctx.text).toContain("README content");
+    expect(ctx.text).toContain("Codebase Overview");
+    expect(ctx.text).toContain("Key files described here");
+    expect(ctx.sources.some((s) => s.label === "CODEBASE.md")).toBe(true);
   });
 
   test("fetchGitHubContext does NOT include docs by default", async () => {
@@ -367,6 +384,56 @@ describe("fetchMarkdownDocs", () => {
 
     // getContent called once (for the code file), not for README/CONTRIBUTING
     expect(ctx.text).not.toContain("## Documentation");
+  });
+});
+
+describe("fetchCodebaseOverview", () => {
+  test("returns content and source when CODEBASE.md exists", async () => {
+    const content = Buffer.from("# Codebase\n- src/ = source files\n- config/ = settings").toString("base64");
+    mockOctokit.repos.getContent.mockResolvedValue({
+      data: { content, html_url: "https://github.com/t/r/blob/main/CODEBASE.md" },
+    });
+
+    const result = await github.fetchCodebaseOverview();
+
+    expect(result.text).toContain("## Codebase Overview");
+    expect(result.text).toContain("src/ = source files");
+    expect(result.sources).toHaveLength(1);
+    expect(result.sources[0].label).toBe("CODEBASE.md");
+    expect(result.sources[0].url).toBe("https://github.com/t/r/blob/main/CODEBASE.md");
+  });
+
+  test("returns empty when CODEBASE.md does not exist (404)", async () => {
+    mockOctokit.repos.getContent.mockRejectedValue(new Error("Not Found"));
+
+    const result = await github.fetchCodebaseOverview();
+
+    expect(result.text).toBe("");
+    expect(result.sources).toHaveLength(0);
+  });
+
+  test("returns empty when CODEBASE.md is empty or whitespace", async () => {
+    const empty = Buffer.from("   ").toString("base64");
+    mockOctokit.repos.getContent.mockResolvedValue({
+      data: { content: empty, html_url: "https://github.com/t/r/blob/main/CODEBASE.md" },
+    });
+
+    const result = await github.fetchCodebaseOverview();
+
+    expect(result.text).toBe("");
+    expect(result.sources).toHaveLength(0);
+  });
+
+  test("truncates content to maxDocChars", async () => {
+    const longContent = Buffer.from("x".repeat(5000)).toString("base64");
+    mockOctokit.repos.getContent.mockResolvedValue({
+      data: { content: longContent, html_url: "https://github.com/t/r/blob/main/CODEBASE.md" },
+    });
+
+    const result = await github.fetchCodebaseOverview();
+
+    // maxDocChars is 1000 in test config; result text includes header + content
+    expect(result.text.length).toBeLessThanOrEqual("## Codebase Overview\n\n".length + 1000);
   });
 });
 

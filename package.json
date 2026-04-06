@@ -38,16 +38,16 @@
   "dependencies": {
     "@octokit/rest": "^22.0.1",
     "@slack/web-api": "^7.15.0",
-    "dotenv": "^17.3.1",
+    "dotenv": "^17.4.1",
     "express": "^5.2.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "eslint": "^10.0.3",
+    "eslint": "^10.2.0",
     "husky": "^9.0.0",
     "jest": "^30.3.0",
     "lint-staged": "^16.4.0",
-    "nock": "^14.0.11",
+    "nock": "^14.0.12",
     "nodemon": "^3.0.0",
     "prettier": "^3.0.0",
     "supertest": "^7.2.2"
